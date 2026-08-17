@@ -53,6 +53,7 @@ export function getOAuthUrl(state: string): string {
   }
 
   const scopes = [
+    'pages_show_list',
     'pages_messaging',
     'pages_manage_metadata',
     'pages_read_engagement',

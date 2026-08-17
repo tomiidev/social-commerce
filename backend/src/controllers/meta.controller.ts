@@ -260,6 +260,6 @@ export const syncPosts = async (req: AuthRequest, res: Response) => {
     });
   } catch (err: any) {
     console.error('[Meta] syncPosts error:', err?.message);
-    return res.status(500).json({ error: 'Error al sincronizar publicaciones' });
+    return res.status(500).json({ error: err?.message || 'Error al sincronizar publicaciones' });
   }
 };

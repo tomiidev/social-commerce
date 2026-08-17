@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import api from '../../lib/api';
 import {
   MessageSquare,
@@ -9,9 +10,14 @@ import {
   ExternalLink,
   Calendar,
   Grid,
-  Filter
+  Filter,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import { InstagramIcon, FacebookIcon } from '../../components/SocialIcons';
+
+type ToastType = 'success' | 'error' | null;
 
 interface Product {
   _id: string;
@@ -32,7 +38,14 @@ interface Post {
 export default function PostsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [channelFilter, setChannelFilter] = useState('');
+  const [toast, setToast] = useState<{ type: ToastType; message: string } | null>(null);
+
+  const showToast = (type: ToastType, message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const fetchPosts = async () => {
     setLoading(true);
@@ -48,6 +61,22 @@ export default function PostsPage() {
     }
   };
 
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const res = await api.post('/meta/sync/posts');
+      const { synced, mode } = res.data;
+      const modeLabel = mode === 'real' ? 'desde Meta' : 'simulado';
+      showToast('success', `✓ ${synced} publicaciones sincronizadas ${modeLabel}`);
+      await fetchPosts();
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || 'Error al sincronizar publicaciones';
+      showToast('error', msg);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchPosts();
@@ -57,6 +86,23 @@ export default function PostsPage() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Toast — rendered at document.body via portal to escape layout stacking context */}
+      {toast && typeof window !== 'undefined' && createPortal(
+        <div
+          className={`fixed top-5 right-5 z-[9999] flex items-center space-x-2 px-4 py-3 rounded-xl shadow-xl text-sm font-medium transition-all duration-300 ${
+            toast.type === 'success'
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+              : 'bg-red-50 text-red-700 border border-red-200'
+          }`}
+        >
+          {toast.type === 'success'
+            ? <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+            : <AlertCircle className="h-4 w-4 flex-shrink-0" />}
+          <span>{toast.message}</span>
+        </div>,
+        document.body
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -64,18 +110,31 @@ export default function PostsPage() {
           <p className="text-xs text-slate-400">Monitoreá las publicaciones de tus redes vinculadas</p>
         </div>
 
-        {/* Filter */}
-        <div className="flex items-center space-x-2 text-xs font-semibold text-slate-600 bg-white border border-slate-100 rounded-xl px-2.5 py-1.5 shadow-sm">
-          <Filter className="h-3.5 w-3.5 text-slate-400" />
-          <select
-            value={channelFilter}
-            onChange={(e) => setChannelFilter(e.target.value)}
-            className="bg-transparent focus:outline-none cursor-pointer"
+        <div className="flex items-center space-x-3">
+          {/* Sync button */}
+          <button
+            id="btn-sync-posts"
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex items-center space-x-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl px-3 py-1.5 shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <option value="">Todos los canales</option>
-            <option value="instagram">Instagram</option>
-            <option value="facebook">Facebook</option>
-          </select>
+            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
+            <span>{syncing ? 'Sincronizando...' : 'Sincronizar desde Meta'}</span>
+          </button>
+
+          {/* Filter */}
+          <div className="flex items-center space-x-2 text-xs font-semibold text-slate-600 bg-white border border-slate-100 rounded-xl px-2.5 py-1.5 shadow-sm">
+            <Filter className="h-3.5 w-3.5 text-slate-400" />
+            <select
+              value={channelFilter}
+              onChange={(e) => setChannelFilter(e.target.value)}
+              className="bg-transparent focus:outline-none cursor-pointer"
+            >
+              <option value="">Todos los canales</option>
+              <option value="instagram">Instagram</option>
+              <option value="facebook">Facebook</option>
+            </select>
+          </div>
         </div>
       </div>
 

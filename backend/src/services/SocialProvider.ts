@@ -101,8 +101,15 @@ export class InstagramProvider extends SocialProvider {
   async syncPosts(_storeId: string): Promise<Partial<IPost>[]> {
     // ── REAL MODE ──────────────────────────────────────────────────────────
     if (this.isConnected && this.credentials) {
+      const { instagramAccountId, pageAccessToken } = this.credentials;
+
+      if (!instagramAccountId) {
+        throw new Error(
+          'Instagram Business Account ID no encontrado. Asegurate de que tu página de Facebook tenga una cuenta de Instagram Business vinculada.'
+        );
+      }
+
       try {
-        const { instagramAccountId, pageAccessToken } = this.credentials;
         const mediaItems = await getInstagramMedia(instagramAccountId, pageAccessToken);
 
         return mediaItems.map((item) => ({
@@ -110,12 +117,17 @@ export class InstagramProvider extends SocialProvider {
           image: item.media_url ?? item.thumbnail_url ?? '',
           channel: 'instagram' as const,
           commentsCount: item.comments_count ?? 0,
-          queriesCount: 0, // derived from comment keyword analysis, not directly from API
+          queriesCount: 0,
           date: new Date(item.timestamp),
         }));
       } catch (err: any) {
-        console.error('[InstagramProvider] syncPosts real API failed, using fallback:', err?.message);
-        // Fall through to simulated data
+        // Extract Meta Graph API error details if available
+        const apiError = err?.response?.data?.error;
+        const detail = apiError
+          ? `[${apiError.code}] ${apiError.message}`
+          : err?.message;
+        console.error('[InstagramProvider] Meta Graph API error:', detail);
+        throw new Error(`Error al obtener publicaciones de Instagram: ${detail}`);
       }
     }
 
@@ -189,8 +201,9 @@ export class FacebookProvider extends SocialProvider {
   async syncPosts(_storeId: string): Promise<Partial<IPost>[]> {
     // ── REAL MODE ──────────────────────────────────────────────────────────
     if (this.isConnected && this.credentials) {
+      const { pageId, pageAccessToken } = this.credentials;
+
       try {
-        const { pageId, pageAccessToken } = this.credentials;
         const posts = await getFacebookPosts(pageId, pageAccessToken);
 
         return posts.map((post) => ({
@@ -202,7 +215,13 @@ export class FacebookProvider extends SocialProvider {
           date: new Date(post.created_time),
         }));
       } catch (err: any) {
-        console.error('[FacebookProvider] syncPosts real API failed, using fallback:', err?.message);
+        // Extract Meta Graph API error details if available
+        const apiError = err?.response?.data?.error;
+        const detail = apiError
+          ? `[${apiError.code}] ${apiError.message}`
+          : err?.message;
+        console.error('[FacebookProvider] Meta Graph API error:', detail);
+        throw new Error(`Error al obtener publicaciones de Facebook: ${detail}`);
       }
     }
 
