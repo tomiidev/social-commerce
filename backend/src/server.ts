@@ -27,16 +27,6 @@ import webhookRoutes from './routes/webhook.routes';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Connect to Database via middleware on every request (reuses cached connection)
-app.use(async (req, res, next) => {
-  try {
-    await connectDB();
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
-
 // Allowed CORS origins: always include localhost for dev, plus any FRONTEND_URL set via env
 const allowedOrigins = [
   'http://localhost:3000',
@@ -44,6 +34,8 @@ const allowedOrigins = [
   ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
 ];
 
+// CORS must be registered FIRST — before any async middleware — so headers are
+// always present even when downstream middleware (e.g. DB connection) throws.
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (e.g. Vercel server-side redirects, curl, mobile)
@@ -55,6 +47,16 @@ app.use(cors({
 
 app.use(express.json());
 app.use(cookieParser());
+
+// Connect to Database via middleware on every request (reuses cached connection)
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 
 // REST API Routes
 app.use('/api/auth', authRoutes);
