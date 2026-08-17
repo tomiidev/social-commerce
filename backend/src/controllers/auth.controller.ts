@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Request, Response, CookieOptions } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
@@ -6,10 +6,12 @@ import { Store } from '../models/Store';
 import { AuthRequest } from '../middleware/auth';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'socialflow_secret_key_123456_change_me';
-const COOKIE_OPTIONS = {
+const isProduction = process.env.NODE_ENV === 'production';
+
+const COOKIE_OPTIONS: CookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
+  secure: isProduction,
+  sameSite: isProduction ? 'none' : 'lax',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
 
@@ -119,7 +121,7 @@ export const login = async (req: Request, res: Response) => {
 
 export const logout = async (req: Request, res: Response) => {
   try {
-    res.clearCookie('token');
+    res.clearCookie('token', COOKIE_OPTIONS);
     return res.status(200).json({ message: 'Sesión cerrada correctamente' });
   } catch (error: any) {
     console.error('Logout error:', error);

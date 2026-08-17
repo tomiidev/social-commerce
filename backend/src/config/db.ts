@@ -20,7 +20,9 @@ export const connectDB = async () => {
       throw new Error('MONGODB_URI environment variable is missing.');
     }
 
-    console.log(`Connecting to MongoDB...`);
+    // Mask credentials in logs (e.g. mongodb+srv://username:password@host -> mongodb+srv://username:****@host)
+    const maskedString = connString.replace(/:([^:@]+)@/, ':****@');
+    console.log(`Connecting to MongoDB at: ${maskedString}`);
     
     // Configure connection options for serverless environment
     const options = {
