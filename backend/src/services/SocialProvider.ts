@@ -103,10 +103,10 @@ export class InstagramProvider extends SocialProvider {
     if (this.isConnected && this.credentials) {
       const { instagramAccountId, pageAccessToken } = this.credentials;
 
+      // No IG Business account linked — valid state, skip silently
       if (!instagramAccountId) {
-        throw new Error(
-          'Instagram Business Account ID no encontrado. Asegurate de que tu página de Facebook tenga una cuenta de Instagram Business vinculada.'
-        );
+        console.log('[InstagramProvider] No instagramAccountId configured, skipping IG sync.');
+        return [];
       }
 
       try {
