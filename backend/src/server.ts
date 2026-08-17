@@ -27,22 +27,37 @@ import webhookRoutes from './routes/webhook.routes';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Allowed CORS origins: always include localhost for dev, plus any FRONTEND_URL set via env
-const allowedOrigins = [
+// Allowed CORS origins.
+// In Vercel, set ALLOWED_ORIGINS to a comma-separated list of all frontend URLs:
+//   e.g. https://social-commerce-frontend-seven.vercel.app,https://www.mystore.com
+// FRONTEND_URL is kept for backwards-compatibility (single origin).
+const allowedOrigins: string[] = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
-  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
 ];
+
+if (process.env.ALLOWED_ORIGINS) {
+  // Comma-separated list: "https://foo.vercel.app,https://bar.com"
+  process.env.ALLOWED_ORIGINS.split(',').forEach((o) => {
+    const trimmed = o.trim();
+    if (trimmed) allowedOrigins.push(trimmed);
+  });
+} else if (process.env.FRONTEND_URL) {
+  // Backwards-compat fallback
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
 
 // CORS must be registered FIRST — before any async middleware — so headers are
 // always present even when downstream middleware (e.g. DB connection) throws.
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g. Vercel server-side redirects, curl, mobile)
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    // Allow requests with no origin (e.g. server-side fetches, curl, Postman)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    console.warn(`[CORS] Blocked request from origin: ${origin}`);
     callback(new Error(`CORS: origin ${origin} not allowed`));
   },
-  credentials: true
+  credentials: true,
 }));
 
 app.use(express.json());
