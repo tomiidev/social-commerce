@@ -2,9 +2,13 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 
-// Load env variables
-dotenv.config({ path: path.join(__dirname, '../../../.env') });
+// Load env variables from backend or root directory
+const envPath = fs.existsSync(path.join(__dirname, '../../.env'))
+  ? path.join(__dirname, '../../.env')
+  : path.join(__dirname, '../../../.env');
+dotenv.config({ path: envPath });
 
 import { Store } from '../models/Store';
 import { User } from '../models/User';

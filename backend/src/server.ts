@@ -3,10 +3,14 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { connectDB } from './config/db';
 
-// Load env variables from root directory
-dotenv.config({ path: path.join(__dirname, '../../.env') });
+// Load env variables from backend or root directory
+const envPath = fs.existsSync(path.join(__dirname, '../.env'))
+  ? path.join(__dirname, '../.env')
+  : path.join(__dirname, '../../.env');
+dotenv.config({ path: envPath });
 
 // Import routes
 import authRoutes from './routes/auth.routes';
@@ -33,11 +37,22 @@ app.use(async (req, res, next) => {
   }
 });
 
-// Middlewares
+// Allowed CORS origins: always include localhost for dev, plus any FRONTEND_URL set via env
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+];
+
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g. Vercel server-side redirects, curl, mobile)
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
   credentials: true
 }));
+
 app.use(express.json());
 app.use(cookieParser());
 

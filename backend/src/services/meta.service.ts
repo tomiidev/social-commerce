@@ -43,8 +43,8 @@ export interface IMetaPage {
  *   - pages_messaging              (send/receive Facebook Messenger messages)
  *   - pages_manage_metadata        (subscribe page to webhooks)
  *   - pages_read_engagement        (read page posts, likes, comments)
- *   - instagram_business_basic     (read IG profile)
- *   - instagram_business_manage_messages  (send/receive IG DMs)
+ *   - instagram_basic              (read IG profile)
+ *   - instagram_manage_messages     (send/receive IG DMs)
  *   - instagram_manage_comments    (private replies to post comments)
  */
 export function getOAuthUrl(state: string): string {
@@ -56,8 +56,8 @@ export function getOAuthUrl(state: string): string {
     'pages_messaging',
     'pages_manage_metadata',
     'pages_read_engagement',
-    'instagram_business_basic',
-    'instagram_business_manage_messages',
+    'instagram_basic',
+    'instagram_manage_messages',
     'instagram_manage_comments',
   ].join(',');
 
