@@ -65,9 +65,16 @@ export default function PostsPage() {
     setSyncing(true);
     try {
       const res = await api.post('/meta/sync/posts');
-      const { synced, mode } = res.data;
+      const { synced, mode, warnings } = res.data;
       const modeLabel = mode === 'real' ? 'desde Meta' : 'simulado';
-      showToast('success', `✓ ${synced} publicaciones sincronizadas ${modeLabel}`);
+
+      if (warnings && warnings.length > 0) {
+        // Partial sync — some channels failed
+        const channelsFailed = warnings.map((w: string) => w.split(':')[0]).join(', ');
+        showToast('error', `${synced} publicaciones sincronizadas. Advertencia en ${channelsFailed}: permisos insuficientes en la app de Meta.`);
+      } else {
+        showToast('success', `✓ ${synced} publicaciones sincronizadas ${modeLabel}`);
+      }
       await fetchPosts();
     } catch (err: any) {
       const msg = err?.response?.data?.error || 'Error al sincronizar publicaciones';

@@ -228,35 +228,49 @@ export const syncPosts = async (req: AuthRequest, res: Response) => {
 
     const storeObjectId = new mongoose.Types.ObjectId(storeId);
     let totalSynced = 0;
+    const warnings: string[] = [];
 
-    // Sync Instagram posts
-    const igProvider = createProvider('instagram', credentials);
-    const igPosts = await igProvider.syncPosts(storeId);
-    for (const post of igPosts) {
-      await Post.findOneAndUpdate(
-        { storeId: storeObjectId, image: post.image, channel: 'instagram' },
-        { ...post, storeId: storeObjectId },
-        { upsert: true, new: true }
-      );
-      totalSynced++;
+    // Sync Instagram posts — isolated so FB can still run if IG fails
+    try {
+      const igProvider = createProvider('instagram', credentials);
+      const igPosts = await igProvider.syncPosts(storeId);
+      for (const post of igPosts) {
+        await Post.findOneAndUpdate(
+          { storeId: storeObjectId, image: post.image, channel: 'instagram' },
+          { ...post, storeId: storeObjectId },
+          { upsert: true, new: true }
+        );
+        totalSynced++;
+      }
+    } catch (igErr: any) {
+      console.warn('[Meta] Instagram sync failed:', igErr?.message);
+      warnings.push(`Instagram: ${igErr?.message}`);
     }
 
-    // Sync Facebook posts
-    const fbProvider = createProvider('facebook', credentials);
-    const fbPosts = await fbProvider.syncPosts(storeId);
-    for (const post of fbPosts) {
-      await Post.findOneAndUpdate(
-        { storeId: storeObjectId, image: post.image, channel: 'facebook' },
-        { ...post, storeId: storeObjectId },
-        { upsert: true, new: true }
-      );
-      totalSynced++;
+    // Sync Facebook posts — isolated so IG can still run if FB fails
+    try {
+      const fbProvider = createProvider('facebook', credentials);
+      const fbPosts = await fbProvider.syncPosts(storeId);
+      for (const post of fbPosts) {
+        await Post.findOneAndUpdate(
+          { storeId: storeObjectId, image: post.image, channel: 'facebook' },
+          { ...post, storeId: storeObjectId },
+          { upsert: true, new: true }
+        );
+        totalSynced++;
+      }
+    } catch (fbErr: any) {
+      console.warn('[Meta] Facebook sync failed:', fbErr?.message);
+      warnings.push(`Facebook: ${fbErr?.message}`);
     }
 
     return res.status(200).json({
-      message: `Sincronización completada`,
+      message: totalSynced > 0
+        ? `Sincronización completada`
+        : `Sincronización completada sin nuevas publicaciones`,
       synced: totalSynced,
       mode: credentials ? 'real' : 'simulated',
+      warnings: warnings.length > 0 ? warnings : undefined,
     });
   } catch (err: any) {
     console.error('[Meta] syncPosts error:', err?.message);
