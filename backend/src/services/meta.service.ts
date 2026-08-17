@@ -57,6 +57,7 @@ export function getOAuthUrl(state: string): string {
     'pages_messaging',
     'pages_manage_metadata',
     'pages_read_engagement',
+    'pages_read_user_content',
     'instagram_basic',
     'instagram_manage_messages',
     'instagram_manage_comments',
