@@ -45,6 +45,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         setUser(response.data.user);
         setStore(response.data.store);
       } catch (error) {
+        localStorage.removeItem('token');
         setUser(null);
         setStore(null);
         // Only redirect to login if we aren't already on login or register pages
@@ -62,8 +63,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const response = await api.post('/auth/login', { email, password });
-      setUser(response.data.user);
-      setStore(response.data.store);
+      const { token, user, store } = response.data;
+      if (token) {
+        localStorage.setItem('token', token);
+      }
+      setUser(user);
+      setStore(store);
       router.push('/dashboard');
     } catch (error) {
       setUser(null);
@@ -79,8 +84,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const response = await api.post('/auth/register', { name, email, password, storeName });
-      setUser(response.data.user);
-      setStore(response.data.store);
+      const { token, user, store } = response.data;
+      if (token) {
+        localStorage.setItem('token', token);
+      }
+      setUser(user);
+      setStore(store);
       router.push('/dashboard');
     } catch (error) {
       setUser(null);
@@ -96,6 +105,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       await api.post('/auth/logout');
+      localStorage.removeItem('token');
       setUser(null);
       setStore(null);
       router.push('/login');

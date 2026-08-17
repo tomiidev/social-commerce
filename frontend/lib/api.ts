@@ -8,6 +8,22 @@ const api = axios.create({
   },
 });
 
+// Add request interceptor to attach JWT token
+api.interceptors.request.use(
+  (config) => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 // Add interceptor to redirect to login on 401 unauthenticated errors
 if (typeof window !== 'undefined') {
   api.interceptors.response.use(
