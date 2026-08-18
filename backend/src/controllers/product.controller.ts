@@ -20,7 +20,7 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
       query.name = { $regex: search, $options: 'i' };
     }
     if (channel) {
-      query.channels = channel;
+       query.channels = { $in: [channel] }; 
     }
     if (status) {
       query.status = status;

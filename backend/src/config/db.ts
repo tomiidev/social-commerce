@@ -28,6 +28,7 @@ export const connectDB = async () => {
     const options = {
       serverSelectionTimeoutMS: 5000, // Fail fast (5 seconds) instead of waiting 30 seconds
       socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+      dbName: 'socialflow',
     };
 
     cachedConnection = mongoose.connect(connString, options);

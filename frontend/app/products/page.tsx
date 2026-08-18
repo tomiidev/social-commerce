@@ -16,7 +16,7 @@ import {
   ImageIcon,
   Loader2
 } from 'lucide-react';
-import { InstagramIcon, FacebookIcon } from '../../components/SocialIcons';
+import { InstagramIcon, FacebookIcon, MeliIcon } from '../../components/SocialIcons';
 
 interface Product {
   _id: string;
@@ -29,7 +29,7 @@ interface Product {
   colors: string[];
   image: string;
   queriesCount: number;
-  channels: ('instagram' | 'facebook')[];
+  channels: ('instagram' | 'facebook' | 'mercadolibre')[];
   status: 'active' | 'inactive';
 }
 
@@ -60,7 +60,7 @@ export default function ProductsPage() {
   const [imagePreview, setImagePreview] = useState<string>('');
   const [imageUploading, setImageUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const [channels, setChannels] = useState<('instagram' | 'facebook')[]>(['instagram']);
+  const [channels, setChannels] = useState<('instagram' | 'facebook' | 'mercadolibre')[]>(['instagram']);
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
 
   // Notifications
@@ -78,7 +78,7 @@ export default function ProductsPage() {
       if (search) url += `search=${search}&`;
       if (channelFilter) url += `channel=${channelFilter}&`;
       if (statusFilter) url += `status=${statusFilter}&`;
-      
+
       const res = await api.get(url);
       setProducts(res.data);
     } catch (err) {
@@ -240,9 +240,8 @@ export default function ProductsPage() {
     <div className="p-6 space-y-6">
       {/* Toast Notification */}
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center space-x-2.5 px-4.5 py-3 rounded-2xl shadow-lg border text-xs font-semibold animate-slide-in ${
-          toast.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'
-        }`}>
+        <div className={`fixed top-4 right-4 z-50 flex items-center space-x-2.5 px-4.5 py-3 rounded-2xl shadow-lg border text-xs font-semibold animate-slide-in ${toast.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'
+          }`}>
           {toast.type === 'success' ? <CheckCircle className="h-4.5 w-4.5" /> : <AlertCircle className="h-4.5 w-4.5" />}
           <span>{toast.message}</span>
         </div>
@@ -298,6 +297,7 @@ export default function ProductsPage() {
             <option value="">Todos los canales</option>
             <option value="instagram">Instagram</option>
             <option value="facebook">Facebook</option>
+            <option value="mercadolibre">Mercado Libre</option>
           </select>
 
           {/* Status */}
@@ -368,9 +368,8 @@ export default function ProductsPage() {
                     </td>
                     <td className="p-4 text-slate-800 font-bold">${prod.price.toLocaleString('es-UY')}</td>
                     <td className="p-4">
-                      <span className={`px-2 py-0.5 rounded text-[10px] ${
-                        prod.stock <= 3 ? 'bg-rose-50 text-rose-600 font-semibold' : 'bg-slate-100 text-slate-600'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded text-[10px] ${prod.stock <= 3 ? 'bg-rose-50 text-rose-600 font-semibold' : 'bg-slate-100 text-slate-600'
+                        }`}>
                         {prod.stock} u.
                       </span>
                     </td>
@@ -383,12 +382,14 @@ export default function ProductsPage() {
                         {prod.channels.includes('facebook') && (
                           <div className="p-1 rounded-md bg-blue-50 text-blue-600" title="Facebook Page"><FacebookIcon className="h-3.5 w-3.5" /></div>
                         )}
+                        {prod.channels.includes('mercadolibre') && (
+                          <div className="p-1 rounded-md bg-yellow-50 text-yellow-600" title="Mercado Libre"><MeliIcon className="h-3.5 w-3.5" /></div>
+                        )}
                       </div>
                     </td>
                     <td className="p-4">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-semibold tracking-wide border ${
-                        prod.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-50 text-slate-500 border-slate-100'
-                      }`}>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-semibold tracking-wide border ${prod.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-50 text-slate-500 border-slate-100'
+                        }`}>
                         {prod.status === 'active' ? 'Activo' : 'Inactivo'}
                       </span>
                     </td>
@@ -423,7 +424,7 @@ export default function ProductsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           {/* Backdrop */}
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setModalOpen(false)}></div>
-          
+
           {/* Content container */}
           <div className="relative bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-100 mx-4 overflow-hidden animate-slide-in flex flex-col max-h-[90vh]">
             {/* Modal Header */}
@@ -574,18 +575,16 @@ export default function ProductsPage() {
                     <button
                       type="button"
                       onClick={() => toggleChannel('instagram')}
-                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${
-                        channels.includes('instagram') ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-slate-50 text-slate-500 border-slate-200'
-                      }`}
+                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${channels.includes('instagram') ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-slate-50 text-slate-500 border-slate-200'
+                        }`}
                     >
                       <InstagramIcon className="h-3.5 w-3.5" /> <span>Instagram</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => toggleChannel('facebook')}
-                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${
-                        channels.includes('facebook') ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'
-                      }`}
+                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${channels.includes('facebook') ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'
+                        }`}
                     >
                       <FacebookIcon className="h-3.5 w-3.5" /> <span>Facebook</span>
                     </button>
@@ -598,18 +597,16 @@ export default function ProductsPage() {
                     <button
                       type="button"
                       onClick={() => setStatus('active')}
-                      className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${
-                        status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-250' : 'bg-slate-50 text-slate-500 border-slate-200'
-                      }`}
+                      className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-250' : 'bg-slate-50 text-slate-500 border-slate-200'
+                        }`}
                     >
                       Activo
                     </button>
                     <button
                       type="button"
                       onClick={() => setStatus('inactive')}
-                      className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${
-                        status === 'inactive' ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-slate-50 text-slate-500 border-slate-200'
-                      }`}
+                      className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${status === 'inactive' ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-slate-50 text-slate-500 border-slate-200'
+                        }`}
                     >
                       Inactivo
                     </button>
