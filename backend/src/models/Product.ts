@@ -11,7 +11,7 @@ export interface IProduct extends Document {
   colors: string[];
   image: string;
   queriesCount: number;
-  channels: ('instagram' | 'facebook')[];
+  channels: ('instagram' | 'facebook'|'mercadolibre' )[];
   status: 'active' | 'inactive';
   createdAt: Date;
   updatedAt: Date;

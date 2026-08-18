@@ -213,15 +213,15 @@ export default function ProductsPage() {
     }
   };
 
-  // Simulate Meta Catalog Sync
-  const handleImportMeta = async () => {
+  // Sync All Providers
+  const handleImportAll = async () => {
     setImporting(true);
     try {
       const res = await api.post('/products/import');
       showToast('success', res.data.message);
       fetchProducts();
     } catch (err) {
-      showToast('error', 'Error sincronizando productos con Meta Catalog');
+      showToast('error', 'Error sincronizando productos con proveedores');
     } finally {
       setImporting(false);
     }
@@ -256,7 +256,7 @@ export default function ProductsPage() {
         </div>
         <div className="flex items-center space-x-3">
           <button
-            onClick={handleImportMeta}
+            onClick={handleImportAll}
             disabled={importing}
             className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-100 rounded-xl text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-50"
           >

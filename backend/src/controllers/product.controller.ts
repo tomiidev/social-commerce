@@ -1,7 +1,9 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { Product } from '../models/Product';
+import { Store } from '../models/Store';
 import { InstagramProvider, FacebookProvider } from '../services/SocialProvider';
+import { MeliProvider } from '../services/MeliProvider';
 import { S3_BUCKET_NAME, S3_REGION } from '../config/s3';
 import mongoose from 'mongoose';
 
@@ -155,22 +157,27 @@ export const deleteProduct = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * Simulates Meta Catalogue Import using SocialProvider abstractions (Rule 9 and 21)
+ * Imports product catalogues from Social Providers (Meta/MercadoLibre)
  */
 export const importProducts = async (req: AuthRequest, res: Response) => {
   try {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
+    // Fetch store for credentials
+    const store = await Store.findById(storeId);
+
     // Instantiating providers through clean abstractions
     const igProvider = new InstagramProvider();
     const fbProvider = new FacebookProvider();
+    const meliProvider = new MeliProvider(store?.meliAccessToken || null);
 
-    // Call sync on both provider instances
+    // Call sync on provider instances
     const igSynced = await igProvider.syncProducts(storeId);
     const fbSynced = await fbProvider.syncProducts(storeId);
+    const meliSynced = await meliProvider.syncProducts(storeId);
 
-    const allSynced = [...igSynced, ...fbSynced];
+    const allSynced = [...igSynced, ...fbSynced, ...meliSynced];
     const importedProducts = [];
 
     for (const item of allSynced) {
@@ -205,12 +212,12 @@ export const importProducts = async (req: AuthRequest, res: Response) => {
     }
 
     return res.status(200).json({
-      message: `Sincronización completada. Se importaron/actualizaron ${importedProducts.length} productos desde Meta.`,
+      message: `Sincronización completada. Se importaron/actualizaron ${importedProducts.length} productos desde Meta y Mercado Libre.`,
       products: importedProducts
     });
   } catch (error: any) {
-    console.error('Error importing products from Meta providers:', error);
-    return res.status(500).json({ error: 'Error al importar productos de Meta' });
+    console.error('Error importing products from providers:', error);
+    return res.status(500).json({ error: 'Error al importar productos de los canales' });
   }
 };
 
