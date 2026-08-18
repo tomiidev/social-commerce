@@ -22,6 +22,7 @@ import postRoutes from './routes/post.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import aiRoutes from './routes/ai.routes';
 import metaRoutes from './routes/meta.routes';
+import meliRoutes from './routes/mercadolibre.routes';
 import webhookRoutes from './routes/webhook.routes';
 
 const app = express();
@@ -83,6 +84,7 @@ app.use('/api/posts', postRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/meta', metaRoutes);
+app.use('/api/mercadolibre', meliRoutes);
 app.use('/api/webhook/meta', webhookRoutes);
 
 // Health check endpoint

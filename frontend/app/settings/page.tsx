@@ -28,17 +28,24 @@ export default function SettingsPage() {
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [showSimulateModal, setShowSimulateModal] = useState(false);
 
+  // Mercado Libre Integration States
+  const [meliConnected, setMeliConnected] = useState(false);
+  const [loadingMeli, setLoadingMeli] = useState(false);
+
   // Form notifications
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const meta = params.get('meta');
+      const meli = params.get('meli');
       const reason = params.get('reason');
-      if (meta === 'denied') {
+      if (meta === 'denied' || meli === 'denied') {
         return 'Conexión cancelada por el usuario.';
       } else if (meta === 'error') {
         return `Error al conectar con Meta: ${reason === 'no_pages' ? 'No se encontraron páginas vinculadas.' : reason || 'Error desconocido'}`;
+      } else if (meli === 'error') {
+        return `Error al conectar con Mercado Libre: ${reason || 'Error desconocido'}`;
       }
     }
     return null;
@@ -47,32 +54,40 @@ export default function SettingsPage() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const meta = params.get('meta');
+      const meli = params.get('meli');
       if (meta === 'connected') {
         return '¡Cuenta de Meta vinculada exitosamente!';
+      } else if (meli === 'connected') {
+        return '¡Cuenta de Mercado Libre vinculada exitosamente!';
       }
     }
     return null;
   });
 
   useEffect(() => {
-    const fetchMetaStatus = async () => {
+    const fetchStatus = async () => {
       try {
-        const res = await api.get('/meta/status');
-        setMetaConnected(res.data.connected);
-        if (res.data.connected) {
+        // Fetch Meta
+        const resMeta = await api.get('/meta/status');
+        setMetaConnected(resMeta.data.connected);
+        if (resMeta.data.connected) {
           setMetaDetails({
-            pageId: res.data.pageId,
-            instagramAccountId: res.data.instagramAccountId
+            pageId: resMeta.data.pageId,
+            instagramAccountId: resMeta.data.instagramAccountId
           });
         } else {
           setMetaDetails(null);
         }
+
+        // Fetch Meli
+        const resMeli = await api.get('/mercadolibre/status');
+        setMeliConnected(resMeli.data.connected);
       } catch (err) {
-        console.error('Error fetching Meta status:', err);
+        console.error('Error fetching connection status:', err);
       }
     };
 
-    fetchMetaStatus();
+    fetchStatus();
 
     let timerId: ReturnType<typeof setTimeout> | undefined = undefined;
 
@@ -80,14 +95,15 @@ export default function SettingsPage() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const meta = params.get('meta');
+      const meli = params.get('meli');
 
-      if (meta) {
+      if (meta || meli) {
         // Clear url params from address bar
         const newUrl = window.location.pathname;
         window.history.replaceState({}, document.title, newUrl);
 
         // Schedule clear timeouts
-        if (meta === 'connected') {
+        if (meta === 'connected' || meli === 'connected') {
           timerId = setTimeout(() => setSuccessMsg(null), 5000);
         } else {
           timerId = setTimeout(() => setErrorMsg(null), 5000);
@@ -143,6 +159,45 @@ export default function SettingsPage() {
       setTimeout(() => setErrorMsg(null), 4000);
     } finally {
       setLoadingMeta(false);
+    }
+  };
+
+  const handleConnectMeli = async () => {
+    setLoadingMeli(true);
+    setErrorMsg(null);
+    try {
+      const res = await api.get('/mercadolibre/auth/url');
+      if (res.data?.url) {
+        window.location.href = res.data.url;
+      } else {
+        throw new Error('No auth URL received');
+      }
+    } catch (err) {
+      console.error('Error connecting Meli:', err);
+      setErrorMsg('Error al iniciar la conexión con Mercado Libre.');
+      setTimeout(() => setErrorMsg(null), 4000);
+    } finally {
+      setLoadingMeli(false);
+    }
+  };
+
+  const handleDisconnectMeli = async () => {
+    if (!window.confirm('¿Estás seguro de que querés desconectar tu cuenta de Mercado Libre? Se detendrá la gestión de productos.')) {
+      return;
+    }
+    setLoadingMeli(true);
+    setErrorMsg(null);
+    try {
+      await api.post('/mercadolibre/disconnect');
+      setMeliConnected(false);
+      setSuccessMsg('Cuenta de Mercado Libre desconectada correctamente.');
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err) {
+      console.error('Error disconnecting Meli:', err);
+      setErrorMsg('Error al desconectar la cuenta de Mercado Libre.');
+      setTimeout(() => setErrorMsg(null), 4000);
+    } finally {
+      setLoadingMeli(false);
     }
   };
 
@@ -345,6 +400,43 @@ export default function SettingsPage() {
                   {loadingMeta ? 'Cargando...' : metaConnected ? 'Desconectar' : 'Conectar'}
                 </button>
               </div>
+            </div>
+
+            {/* Mercado Libre */}
+            <div className="mt-6 pt-6 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider text-slate-400">Canales Vinculados (Mercado Libre)</h3>
+                  {meliConnected && (
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-100 text-[10px] font-bold text-emerald-600 flex items-center space-x-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span>Conectado</span>
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed mb-4">Conectá tu cuenta de vendedor para gestionar tus productos directamente desde la plataforma.</p>
+
+                <div className="flex items-center justify-between p-3 bg-slate-50/50 border border-slate-100 rounded-2xl">
+                    <div className="flex items-center space-x-3">
+                        <div className="p-2.5 rounded-xl bg-yellow-50 text-yellow-600 font-bold text-lg">ML</div>
+                        <div className="text-left text-xs">
+                            <span className="block font-bold text-slate-800">Mercado Libre Seller Account</span>
+                            <span className="text-[10px] text-slate-400">
+                                {meliConnected ? 'Vinculada' : 'Desconectada'}
+                            </span>
+                        </div>
+                    </div>
+                    <button
+                        onClick={meliConnected ? handleDisconnectMeli : handleConnectMeli}
+                        disabled={loadingMeli}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
+                            meliConnected 
+                                ? 'bg-white border-slate-200 text-rose-500 hover:bg-rose-50/50' 
+                                : 'bg-indigo-600 border-transparent text-white hover:bg-indigo-700 shadow-sm'
+                        }`}
+                    >
+                        {loadingMeli ? 'Cargando...' : meliConnected ? 'Desconectar' : 'Conectar'}
+                    </button>
+                </div>
             </div>
           </div>
 
