@@ -34,7 +34,7 @@ export function getOAuthUrl(state: string): string {
     state,
   });
 
-  return `https://auth.mercadolibre.com.ar/authorization?${params.toString()}`;
+  return `https://auth.mercadolibre.com.uy/authorization?${params.toString()}`;
 }
 
 /**
