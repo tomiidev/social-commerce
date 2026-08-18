@@ -15,6 +15,9 @@ export interface IStore extends Document {
   meliAccessToken?: string;
   meliRefreshToken?: string;
   meliTokenExpiresAt?: Date;
+  // AI Token Usage
+  aiTokensUsed: number;
+  aiTokenLimit: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,6 +38,9 @@ const StoreSchema = new Schema<IStore>(
     meliAccessToken: { type: String, default: '' },
     meliRefreshToken: { type: String, default: '' },
     meliTokenExpiresAt: { type: Date },
+    // AI Token Usage
+    aiTokensUsed: { type: Number, default: 0 },
+    aiTokenLimit: { type: Number, default: 500000 },
   },
   { timestamps: true }
 );

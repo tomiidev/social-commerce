@@ -8,11 +8,12 @@ import {
   Send,
   HelpCircle,
   Sparkles,
-  ArrowRight,
   TrendingUp,
   AlertTriangle,
-  RefreshCw
+  FileSpreadsheet
 } from 'lucide-react';
+import AIResponseDisplay from '../../components/AIResponseDisplay';
+import { PREDEFINED_QUESTIONS } from '../../types/ai';
 
 interface ChatMessage {
   id: string;
@@ -20,6 +21,17 @@ interface ChatMessage {
   text: string;
   createdAt: string;
 }
+
+const getIconForQuestion = (id: number) => {
+  switch (id) {
+    case 1: return TrendingUp;
+    case 2: return AlertTriangle;
+    case 3: return FileSpreadsheet;
+    case 4: return User;
+    case 5: return HelpCircle;
+    default: return Sparkles;
+  }
+};
 
 export default function AIAssistantPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -34,20 +46,12 @@ export default function AIAssistantPage() {
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const suggestedQuestions = [
-    { text: '¿Qué productos tienen más demanda?', icon: TrendingUp },
-    { text: '¿Qué preguntas hacen más mis clientes?', icon: HelpCircle },
-    { text: '¿Qué publicaciones generan más interés?', icon: Sparkles },
-    { text: '¿Dónde estoy perdiendo ventas?', icon: AlertTriangle },
-    { text: 'Dame un resumen de esta semana.', icon: Bot }
-  ];
-
   // Scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSendMessage = async (textToSend: string) => {
+  const handleSendMessage = async (textToSend: string, queryType?: string) => {
     if (!textToSend.trim() || loading) return;
 
     const userMessage: ChatMessage = {
@@ -62,23 +66,32 @@ export default function AIAssistantPage() {
     setLoading(true);
 
     try {
-      // Map history for API
-      const history = messages
-        .filter(m => m.id !== 'welcome') // Skip welcome
-        .map(m => ({
-          sender: m.sender,
-          text: m.text
-        }));
-
-      const res = await api.post('/ai/chat', {
-        question: textToSend,
-        history
-      });
+      let assistantReply = '';
+      
+      if (queryType) {
+        // Predefined question flow
+        const res = await api.post('/ai/predefined-question', {
+          question: textToSend,
+          queryType
+        });
+        assistantReply = res.data.reply;
+      } else {
+        // Open chat flow
+        const history = messages
+          .filter(m => m.id !== 'welcome')
+          .map(m => ({ sender: m.sender, text: m.text }));
+        
+        const res = await api.post('/ai/chat', {
+          question: textToSend,
+          history
+        });
+        assistantReply = res.data.reply;
+      }
 
       const assistantMessage: ChatMessage = {
         id: Math.random().toString(),
         sender: 'assistant',
-        text: res.data.reply,
+        text: assistantReply,
         createdAt: new Date().toISOString()
       };
 
@@ -88,7 +101,7 @@ export default function AIAssistantPage() {
       const errorMessage: ChatMessage = {
         id: Math.random().toString(),
         sender: 'assistant',
-        text: 'Disculpame, ocurrió un inconveniente al procesar tu consulta con Gemini. Por favor, asegúrate de tener configurada tu API key de Gemini o vuelve a intentarlo.',
+        text: 'Disculpame, ocurrió un inconveniente al procesar tu consulta. Por favor, vuelve a intentarlo en un momento.',
         createdAt: new Date().toISOString()
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -97,89 +110,39 @@ export default function AIAssistantPage() {
     }
   };
 
-  const parseMarkdown = (text: string) => {
-    // Simple parser for bold strings (**text**) and bullet lists
-    const lines = text.split('\n');
-    return lines.map((line, idx) => {
-      const content = line;
-      
-      // Bold replacer
-      const boldRegex = /\*\*(.*?)\*\*/g;
-      const parts = [];
-      let lastIndex = 0;
-      let match;
-      
-      while ((match = boldRegex.exec(content)) !== null) {
-        if (match.index > lastIndex) {
-          parts.push(content.substring(lastIndex, match.index));
-        }
-        parts.push(<strong key={match.index} className="font-bold text-slate-900">{match[1]}</strong>);
-        lastIndex = boldRegex.lastIndex;
-      }
-      
-      if (lastIndex < content.length) {
-        parts.push(content.substring(lastIndex));
-      }
-      
-      const isBullet = line.trim().startsWith('*') || line.trim().startsWith('-');
-      const isNumList = /^\d+\.\s/.test(line.trim());
-
-      if (isBullet) {
-        return (
-          <li key={idx} className="ml-4 list-disc pl-1 mb-1 leading-relaxed text-xs">
-            {parts.length > 0 ? parts : line.replace(/^[\*\-]\s/, '')}
-          </li>
-        );
-      }
-      if (isNumList) {
-        return (
-          <li key={idx} className="ml-4 list-decimal pl-1 mb-1 leading-relaxed text-xs">
-            {parts.length > 0 ? parts : line.replace(/^\d+\.\s/, '')}
-          </li>
-        );
-      }
-      
-      return (
-        <p key={idx} className="mb-2.5 leading-relaxed text-xs whitespace-pre-wrap">
-          {parts.length > 0 ? parts : content}
-        </p>
-      );
-    });
-  };
-
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-slate-50">
+    <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-slate-50 w-full">
       {/* MAIN CHAT AREA */}
-      <div className="flex-1 flex flex-col h-full bg-slate-50">
+      <div className="flex-1 flex flex-col h-full bg-slate-50 min-w-0">
         <div className="p-4 border-b border-slate-100 bg-white z-10">
           <h2 className="text-base font-bold text-slate-800">Asistente IA</h2>
           <p className="text-[10px] text-slate-400">Analizá tu tienda con inteligencia artificial impulsada por Gemini</p>
         </div>
 
         {/* Chat message flow */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto p-6 space-y-5 overflow-x-hidden w-full">
           {messages.map((msg) => {
             const isAI = msg.sender === 'assistant';
             return (
               <div
                 key={msg.id}
-                className={`flex ${isAI ? 'justify-start' : 'justify-end'} items-start space-x-3`}
+                className={`flex ${isAI ? 'justify-start' : 'justify-end'} items-start space-x-3 w-full`}
               >
                 {isAI && (
                   <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 shadow-sm shrink-0">
                     <Bot className="h-4.5 w-4.5" />
                   </div>
                 )}
-                <div className="flex flex-col max-w-[75%] space-y-1">
+                <div className="flex flex-col max-w-[85%] sm:max-w-[75%] space-y-1 overflow-hidden">
                   <div
-                    className={`px-4.5 py-3 rounded-2xl shadow-sm text-xs leading-relaxed ${
+                    className={`px-4.5 py-3 rounded-2xl shadow-sm text-xs leading-relaxed break-words ${
                       isAI
                         ? 'bg-white text-slate-700 border border-slate-100 rounded-tl-none'
                         : 'bg-indigo-600 text-white rounded-tr-none'
                     }`}
                   >
                     {isAI ? (
-                      <div className="space-y-1.5">{parseMarkdown(msg.text)}</div>
+                      <AIResponseDisplay text={msg.text} />
                     ) : (
                       <p className="whitespace-pre-wrap">{msg.text}</p>
                     )}
@@ -215,6 +178,22 @@ export default function AIAssistantPage() {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Suggested Questions Slider (Visible on small screens) */}
+        <div className="lg:hidden w-full border-t border-slate-100 bg-white min-w-0">
+          <div className="flex overflow-x-auto p-4 gap-2 scrollbar-hide w-full">
+            {PREDEFINED_QUESTIONS.map((q) => (
+              <button
+                key={q.id}
+                onClick={() => handleSendMessage(q.question, q.queryType)}
+                disabled={loading}
+                className="whitespace-nowrap px-4 py-2 bg-slate-100 rounded-full text-xs font-medium text-slate-700 hover:bg-indigo-100 hover:text-indigo-700 transition flex-shrink-0"
+              >
+                {q.question}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Input box */}
         <div className="p-4 bg-white border-t border-slate-100 shrink-0 z-10">
           <form
@@ -242,7 +221,7 @@ export default function AIAssistantPage() {
         </div>
       </div>
 
-      {/* SUGGESTED PANEL SIDEBAR */}
+      {/* SUGGESTED PANEL SIDEBAR (Visible only on Large screens) */}
       <aside className="hidden lg:flex w-80 flex-col bg-white border-l border-slate-100 h-full p-5 space-y-6 shrink-0">
         <div>
           <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider text-slate-400 mb-2">Sugerencias</h4>
@@ -250,12 +229,12 @@ export default function AIAssistantPage() {
         </div>
 
         <div className="space-y-3">
-          {suggestedQuestions.map((q) => {
-            const Icon = q.icon;
+          {PREDEFINED_QUESTIONS.map((q) => {
+            const Icon = getIconForQuestion(q.id);
             return (
               <button
-                key={q.text}
-                onClick={() => handleSendMessage(q.text)}
+                key={q.id}
+                onClick={() => handleSendMessage(q.question, q.queryType)}
                 disabled={loading}
                 className="w-full text-left p-3.5 bg-slate-50 hover:bg-indigo-50 border border-slate-100 hover:border-indigo-100 rounded-2xl flex items-center space-x-3 group transition-all duration-200 disabled:opacity-50"
               >
@@ -263,8 +242,7 @@ export default function AIAssistantPage() {
                   <Icon className="h-4.5 w-4.5" />
                 </div>
                 <div className="flex-1 flex justify-between items-center text-xs">
-                  <span className="font-semibold text-slate-700 group-hover:text-slate-900 transition-colors">{q.text}</span>
-                  <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-1.5" />
+                  <span className="font-semibold text-slate-700 group-hover:text-slate-900 transition-colors">{q.question}</span>
                 </div>
               </button>
             );

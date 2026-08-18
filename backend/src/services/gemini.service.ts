@@ -1,8 +1,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AIUsage } from '../models/AIUsage';
+import { Store } from '../models/Store';
 import mongoose from 'mongoose';
 
-// Estimated cost coefficients (in USD per 1M tokens) for Gemini 1.5 Flash
 const COST_PER_1M_INPUT = 0.075; // $0.075 / 1M
 const COST_PER_1M_OUTPUT = 0.30;  // $0.30 / 1M
 
@@ -16,9 +16,12 @@ export class GeminiService {
     return this.genAI;
   }
 
-  /**
-   * Log AI token usage and estimate cost
-   */
+  private static async checkQuotas(storeId: string): Promise<boolean> {
+    const store = await Store.findById(storeId);
+    if (!store) return false;
+    return store.aiTokensUsed < store.aiTokenLimit;
+  }
+
   private static async logUsage(
     storeId: string,
     modelName: string,
@@ -30,6 +33,11 @@ export class GeminiService {
       const estimatedCost = 
         (inputTokens * (COST_PER_1M_INPUT / 1000000)) + 
         (outputTokens * (COST_PER_1M_OUTPUT / 1000000));
+
+      // Update Store Token Count
+      await Store.findByIdAndUpdate(storeId, {
+        $inc: { aiTokensUsed: totalTokens }
+      });
 
       await AIUsage.create({
         storeId: new mongoose.Types.ObjectId(storeId),
@@ -53,7 +61,7 @@ export class GeminiService {
     conversationHistory: { sender: string; text: string }[],
     productsContext: { name: string; price: number; stock: number; colors?: string[]; sizes?: string[] }[]
   ): Promise<string> {
-    const modelName = 'gemini-1.5-flash';
+    const modelName = 'gemini-3.1-flash-lite';
     const client = this.getClient();
 
     const formattedHistory = conversationHistory
@@ -79,10 +87,10 @@ ${formattedHistory}
 
 Genera solo el texto de la respuesta sugerida. Sin introducciones como "Aquí tienes la respuesta" o formatos markdown excesivos más allá de negritas en el precio o producto si es necesario.`;
 
-    if (!client) {
-      // Fallback response generator if API Key is not set
-      console.warn('GEMINI_API_KEY is not set. Using fallback mock service.');
-      
+    if (!client || !(await this.checkQuotas(storeId))) {
+      // Fallback response generator if API Key is not set or quota exceeded
+      console.warn(client ? 'AI Quota exceeded.' : 'GEMINI_API_KEY is not set.', 'Using fallback mock service.');
+
       const lastMessage = conversationHistory[conversationHistory.length - 1]?.text.toLowerCase() || '';
       let reply = `¡Hola, ${customerName}! ¿Cómo estás? `;
 
@@ -108,7 +116,7 @@ Genera solo el texto de la respuesta sugerida. Sin introducciones como "Aquí ti
       const model = client.getGenerativeModel({ model: modelName });
       const result = await model.generateContent(systemPrompt);
       const response = await result.response;
-      
+
       // Extract metadata usage if available
       const usage = response.usageMetadata;
       if (usage) {
@@ -145,7 +153,7 @@ Genera solo el texto de la respuesta sugerida. Sin introducciones como "Aquí ti
       metrics: string;
     }
   ): Promise<string> {
-    const modelName = 'gemini-1.5-flash';
+    const modelName = 'gemini-3.1-flash-lite';
     const client = this.getClient();
 
     const systemPrompt = `Sos el Asistente IA de SocialFlow, un copiloto analítico inteligente especializado para la tienda "${storeName}" en Uruguay.
@@ -172,76 +180,23 @@ Normas de conducta:
 5. Escribe tu respuesta en formato markdown elegante (usa negritas, listas ordenadas, viñetas, tablas cortas si es apropiado para organizar la información).
 Evita comentarios técnicos sobre la estructura interna de MongoDB.`;
 
-    if (!client) {
-      console.warn('GEMINI_API_KEY is not set. Using fallback assistant service.');
-      
-      const question = newQuestion.toLowerCase();
-      let reply = '';
-      
-      if (question.includes('producto') || question.includes('demanda') || question.includes('interés') || question.includes('consultado')) {
-        reply = `De acuerdo al catálogo de **${storeName}**, los productos que despiertan más interés son:
-        
-1. **Campera Nike** — 324 consultas (Alta demanda, stock crítico de 3 unidades).
-2. **Zapatillas Adidas** — 211 consultas (Buen desempeño, stock de 7 unidades).
-3. **Remera Básica** — 87 consultas (Stock de 15 unidades).
-
-*Sugerencia:* Sería recomendable reponer stock de la **Campera Nike**, ya que concentra más del 50% de las consultas de ropa de abrigo esta semana y la conversión podría verse afectada por la falta de talles.`;
-      } else if (question.includes('publicaci') || question.includes('interés') || question.includes('post')) {
-        reply = `Las publicaciones con mayor tracción social esta semana provienen principalmente de **Instagram**:
-
-* **Instagram - Post Campera Nike** (hace 2 días):
-  * **324 consultas** generadas.
-  * **87 comentarios**.
-  * Es por lejos el post con más interacción.
-  
-* **Facebook - Post Zapatillas Adidas** (hace 5 días):
-  * **211 consultas** generadas.
-  * **52 comentarios**.
-
-La audiencia de Instagram está respondiendo un 65% mejor a las campañas visuales directas en comparación con Facebook (35%).`;
-      } else if (question.includes('perdiendo') || question.includes('oportunidades') || question.includes('conversión') || question.includes('venta')) {
-        reply = `Detectamos dos áreas principales donde se están perdiendo oportunidades de venta:
-
-1. **Falta de Stock:** La **Campera Nike** tiene **324 consultas** pero solo **3 unidades en stock**. Los clientes muestran interés pero no pueden concretar la compra debido a la falta de stock o talles en el catálogo.
-2. **Tasa de Respuesta en Facebook:** El canal de Facebook concentra el **35% de las consultas**, pero la tasa de respuesta en el Inbox es del **56%** (en Instagram es del **85%**). Responder más rápido en Facebook podría incrementar las ventas mensuales hasta en un 12%.`;
-      } else if (question.includes('pregunta') || question.includes('hacen') || question.includes('consultan')) {
-        reply = `Las consultas más frecuentes de los clientes esta semana se agrupan en tres temáticas principales:
-
-1. **Precio e información del producto (45%):** Preguntas directas del tipo *"¿Precio?"* o *"¿Cuánto cuesta?"* tras ver publicaciones de camperas o zapatillas.
-2. **Talles y stock disponible (35%):** Consultas sobre disponibilidad en talle M y L de prendas seleccionadas.
-3. **Medios de pago y envío (20%):** Preguntas sobre si se acepta transferencia bancaria o envíos al interior del país (ej. a Maldonado, Canelones, Salto).`;
-      } else {
-        reply = `¡Hola! Soy tu asistente de SocialFlow. He analizado el estado de **${storeName}** y puedo confirmarte que durante la última semana:
-        
-* Se registraron **1.284 consultas** (un **+18%** respecto a la semana pasada).
-* Se concretaron **23 ventas** por un monto total aproximado de **$68.990 UYU**.
-* El producto estrella en consultas sigue siendo la **Campera Nike**, seguido por las **Zapatillas Adidas**.
-
-¿Te gustaría que analicemos en detalle la conversión de algún producto o cómo optimizar las respuestas de tus redes sociales?`;
-      }
-
-      await this.logUsage(storeId, `${modelName} (mock)`, (systemPrompt.length + newQuestion.length) / 4, reply.length / 4);
-      return reply;
-    }
-
     try {
+      if (!client || !(await this.checkQuotas(storeId))) {
+        throw new Error(client ? 'AI Token quota exceeded.' : 'GEMINI_API_KEY is not set.');
+      }
       const model = client.getGenerativeModel({ model: modelName });
-      
-      const contents = [];
-      // System instructions as system context:
-      // In the new API structure, systemInstruction can be passed in config or inside contents
-      // To ensure compatibility across different sdk versions, we build a history context:
+
       const chat = model.startChat({
         history: chatHistory.map(h => ({
           role: h.role,
           parts: [{ text: h.text }]
         })),
-        systemInstruction: systemPrompt
+        systemInstruction: { text: systemPrompt }
       });
 
       const result = await chat.sendMessage(newQuestion);
       const response = await result.response;
-      
+
       const usage = response.usageMetadata;
       if (usage) {
         await this.logUsage(
@@ -258,6 +213,57 @@ La audiencia de Instagram está respondiendo un 65% mejor a las campañas visual
     } catch (error: any) {
       console.error('Error in Gemini Assistant chat:', error);
       throw new Error(`Gemini Assistant Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Formats raw DB data for a predefined question into a human-readable response
+   */
+  static async formatPredefinedResponse(
+    storeId: string,
+    question: string,
+    dbData: any,
+    queryType: string
+  ): Promise<string> {
+    const modelName = 'gemini-3.1-flash-lite';
+    const client = this.getClient();
+
+    const systemPrompt = `Sos un asistente inteligente de SocialFlow.
+Tu tarea es convertir datos estadísticos de la base de datos en una respuesta amable, profesional y en español uruguayo para el dueño de la tienda.
+La moneda es Pesos Uruguayos (UYU) y se representa como $ (ej. $3.990).
+Responde basándote estrictamente en los siguientes datos obtenidos de la BD:
+
+Pregunta original: "${question}"
+Tipo de consulta: ${queryType}
+Datos de la BD (JSON): ${JSON.stringify(dbData)}
+
+Si los datos están vacíos o no hay información, indica amablemente que no hay datos disponibles para ese período o consulta.`;
+
+    if (!client || !(await this.checkQuotas(storeId))) {
+      return `Respuesta automática (API KEY no configurada o cuota excedida): Analizando datos de tipo ${queryType}.`;
+    }
+
+    try {
+      const model = client.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(systemPrompt);
+      const response = await result.response;
+      
+      const usage = response.usageMetadata;
+      if (usage) {
+        await this.logUsage(
+          storeId,
+          modelName,
+          usage.promptTokenCount,
+          usage.candidatesTokenCount
+        );
+      } else {
+        await this.logUsage(storeId, modelName, systemPrompt.length / 4, response.text().length / 4);
+      }
+      
+      return response.text().trim();
+    } catch (error: any) {
+      console.error('Error formatting response with Gemini:', error);
+      return `Hubo un error al procesar tu consulta: ${error.message}`;
     }
   }
 }

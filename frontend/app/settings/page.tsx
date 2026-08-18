@@ -31,6 +31,9 @@ export default function SettingsPage() {
   // Mercado Libre Integration States
   const [meliConnected, setMeliConnected] = useState(false);
   const [loadingMeli, setLoadingMeli] = useState(false);
+  
+  // AI Usage State
+  const [aiUsage, setAiUsage] = useState({ tokensUsed: 0, tokenLimit: 0 });
 
   // Form notifications
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -82,6 +85,10 @@ export default function SettingsPage() {
         // Fetch Meli
         const resMeli = await api.get('/mercadolibre/status');
         setMeliConnected(resMeli.data.connected);
+
+        // Fetch AI Usage
+        const resAi = await api.get('/ai/token-usage');
+        setAiUsage(resAi.data);
       } catch (err) {
         console.error('Error fetching connection status:', err);
       }
@@ -446,22 +453,22 @@ export default function SettingsPage() {
             
             <div className="space-y-3.5 text-xs font-semibold text-slate-600">
               <div className="flex justify-between items-center">
-                <span>Tokens consumidos (este mes)</span>
-                <span className="text-slate-800 font-bold">51,700 tokens</span>
+                <span>Tokens consumidos</span>
+                <span className="text-slate-800 font-bold">{aiUsage.tokensUsed.toLocaleString()} tokens</span>
               </div>
               <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                <div className="bg-indigo-600 h-full rounded-full w-[15.5%]"></div>
+                <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${Math.min(100, (aiUsage.tokensUsed / (aiUsage.tokenLimit || 1)) * 100)}%` }}></div>
               </div>
               
               <div className="flex justify-between items-center text-[10px] text-slate-400 mt-1">
-                <span>15.5% del límite mensual</span>
-                <span>Límite: 300,000 tokens</span>
+                <span>{((aiUsage.tokensUsed / (aiUsage.tokenLimit || 1)) * 100).toFixed(1)}% del límite mensual</span>
+                <span>Límite: {aiUsage.tokenLimit.toLocaleString()} tokens</span>
               </div>
 
               <div className="flex items-center space-x-2.5 p-3.5 bg-indigo-50/40 border border-indigo-100/30 rounded-2xl mt-4">
                 <Bot className="h-4.5 w-4.5 text-indigo-600 shrink-0" />
                 <p className="text-[10px] text-indigo-900 leading-relaxed font-medium">
-                  Estás operando bajo el plan Pro. El consumo de Gemini API cuenta con un coste aproximado estimado de **$0.012 USD** hasta el momento, bonificado completamente por SocialFlow.
+                  El uso de la IA se mide en tokens. El límite establecido ayuda a mantener los costos operativos bajo control según tu plan actual.
                 </p>
               </div>
             </div>

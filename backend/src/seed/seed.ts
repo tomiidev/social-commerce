@@ -621,7 +621,7 @@ async function seed() {
     const aiUsageData = [
       {
         storeId: store._id,
-        model: 'gemini-1.5-flash',
+        model: 'gemini-3.1-flash-lite',
         inputTokens: 14500,
         outputTokens: 3200,
         totalTokens: 17700,
@@ -630,7 +630,7 @@ async function seed() {
       },
       {
         storeId: store._id,
-        model: 'gemini-1.5-flash',
+        model: 'gemini-3.1-flash-lite',
         inputTokens: 22800,
         outputTokens: 4900,
         totalTokens: 27700,
@@ -639,7 +639,7 @@ async function seed() {
       },
       {
         storeId: store._id,
-        model: 'gemini-1.5-flash',
+        model: 'gemini-3.1-flash-lite',
         inputTokens: 38200,
         outputTokens: 8100,
         totalTokens: 46300,

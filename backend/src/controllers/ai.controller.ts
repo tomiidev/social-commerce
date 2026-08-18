@@ -134,3 +134,45 @@ export const chatAssistant = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({ error: error.message || 'Error al procesar consulta con el asistente' });
   }
 };
+
+export const handlePredefinedQuestion = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    const { question, queryType } = req.body;
+
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    // 1. Obtener datos de la BD necesarios para responder
+    const storeObjectId = new mongoose.Types.ObjectId(storeId);
+    
+    let dbData: any = {};
+    if (queryType === 'TOP_SALES') {
+      dbData = await Sale.aggregate([
+        { $match: { storeId: storeObjectId } },
+        { $group: { _id: "$productId", total: { $sum: "$amount" } } },
+        { $sort: { total: -1 } },
+        { $limit: 5 },
+        { $lookup: { from: 'products', localField: '_id', foreignField: '_id', as: 'product' } }
+      ]);
+    } else if (queryType === 'LOW_STOCK') {
+      dbData = await Product.find({ storeId: storeObjectId, stock: { $lt: 5 } }).select('name stock');
+    } else if (queryType === 'TOTAL_REVENUE') {
+      dbData = await Sale.aggregate([
+        { $match: { storeId: storeObjectId } },
+        { $group: { _id: null, totalRevenue: { $sum: "$amount" } } }
+      ]);
+    } else if (queryType === 'TOP_CUSTOMER') {
+        dbData = await Customer.find({ storeId: storeObjectId }).sort({ purchasesCount: -1 }).limit(1);
+    } else if (queryType === 'TOTAL_QUERIES') {
+        dbData = await Product.find({ storeId: storeObjectId }).select('name queriesCount');
+    }
+
+    // 2. Usar Gemini para transformar los datos crudos en una respuesta amable
+    const reply = await GeminiService.formatPredefinedResponse(storeId, question, dbData, queryType);
+
+    return res.status(200).json({ reply });
+  } catch (error: any) {
+    console.error('Error handling predefined AI question:', error);
+    return res.status(500).json({ error: error.message || 'Error al procesar la pregunta' });
+  }
+};
