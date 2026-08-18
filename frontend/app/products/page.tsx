@@ -14,9 +14,12 @@ import {
   HelpCircle,
   Upload,
   ImageIcon,
-  Loader2
+  Loader2,
+  MessageSquare,
+  FileSpreadsheet
 } from 'lucide-react';
 import { InstagramIcon, FacebookIcon, MeliIcon } from '../../components/SocialIcons';
+import ProductImporter from '../../components/ProductImporter';
 
 interface Product {
   _id: string;
@@ -29,7 +32,7 @@ interface Product {
   colors: string[];
   image: string;
   queriesCount: number;
-  channels: ('instagram' | 'facebook' | 'mercadolibre')[];
+  channels: ('instagram' | 'facebook' | 'mercadolibre' | 'import')[];
   status: 'active' | 'inactive';
 }
 
@@ -37,15 +40,53 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [channelFilter, setChannelFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(15);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
+
+  // Debounce effect
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+      setCurrentPage(1); // Reset to page 1 on new search
+    }, 500);
+
+    return () => clearTimeout(handler);
+  }, [search]);
 
   // Import Meta state
   const [importing, setImporting] = useState(false);
+  const [importerOpen, setImporterOpen] = useState(false);
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // Preguntas Modal State
+  const [questionsModalOpen, setQuestionsModalOpen] = useState(false);
+  const [currentQuestions, setCurrentQuestions] = useState<[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+
+  // Open Questions Modal
+  const handleOpenQuestionsModal = async (product: Product) => {
+    setQuestionsModalOpen(true);
+    setLoadingQuestions(true);
+    setCurrentQuestions([]);
+    try {
+      const res = await api.get(`/mercadolibre/items/${product.sku}/questions`);
+      setCurrentQuestions(res.data);
+    } catch (err) {
+      showToast('error', 'Error al cargar preguntas');
+    } finally {
+      setLoadingQuestions(false);
+    }
+  };
 
   // Form State
   const [name, setName] = useState('');
@@ -60,7 +101,7 @@ export default function ProductsPage() {
   const [imagePreview, setImagePreview] = useState<string>('');
   const [imageUploading, setImageUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const [channels, setChannels] = useState<('instagram' | 'facebook' | 'mercadolibre')[]>(['instagram']);
+  const [channels, setChannels] = useState<('instagram' | 'facebook' | 'mercadolibre' | 'import')[]>(['instagram']);
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
 
   // Notifications
@@ -71,16 +112,23 @@ export default function ProductsPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (isManual: boolean = false) => {
+    // Si no es una llamada manual (como un cambio de búsqueda), y ya estamos cargando, evitamos refrescos innecesarios
+    if (!isManual && loading) return;
+
     setLoading(true);
     try {
-      let url = '/products?';
-      if (search) url += `search=${search}&`;
+      let url = `/products?page=${currentPage}&limit=${limit}&`;
+      if (debouncedSearch) url += `search=${debouncedSearch}&`;
       if (channelFilter) url += `channel=${channelFilter}&`;
       if (statusFilter) url += `status=${statusFilter}&`;
 
       const res = await api.get(url);
-      setProducts(res.data);
+      
+      // Actualizamos los estados en un solo batch lógico
+      setProducts(res.data.products);
+      setTotalProducts(res.data.total);
+      setTotalPages(res.data.pages);
     } catch (err) {
       console.error('Error fetching products:', err);
     } finally {
@@ -89,11 +137,18 @@ export default function ProductsPage() {
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchProducts();
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [search, channelFilter, statusFilter]);
+    let isMounted = true;
+    
+    const runFetch = async () => {
+      if (isMounted) {
+        await fetchProducts(true);
+      }
+    };
+    
+    runFetch();
+    
+    return () => { isMounted = false; };
+  }, [debouncedSearch, channelFilter, statusFilter, currentPage, limit]);
 
   // Open Modal for Create
   const handleOpenCreateModal = () => {
@@ -174,8 +229,8 @@ export default function ProductsPage() {
       price: Number(price),
       stock: Number(stock),
       sku,
-      sizes: sizes.split(',').map(s => s.trim()).filter(s => s.length > 0),
-      colors: colors.split(',').map(c => c.trim()).filter(c => c.length > 0),
+      sizes: sizes.split(',').map(s => s.trim()).filter(Boolean),
+      colors: colors.split(',').map(c => c.trim()).filter(Boolean),
       image: finalImageUrl,
       channels,
       status
@@ -255,12 +310,19 @@ export default function ProductsPage() {
         </div>
         <div className="flex items-center space-x-3">
           <button
+            onClick={() => setImporterOpen(true)}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-100 rounded-xl text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            <span>Importar CSV/Excel</span>
+          </button>
+          <button
             onClick={handleImportAll}
             disabled={importing}
             className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-slate-100 rounded-xl text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${importing ? 'animate-spin' : ''}`} />
-            <span>{importing ? 'Sincronizando...' : 'Importar productos'}</span>
+            <span>{importing ? 'Sincronizando...' : 'Importar proveedores'}</span>
           </button>
           <button
             onClick={handleOpenCreateModal}
@@ -271,6 +333,16 @@ export default function ProductsPage() {
           </button>
         </div>
       </div>
+
+      {/* Componente de Importación */}
+      <ProductImporter
+        isOpen={importerOpen}
+        onClose={() => setImporterOpen(false)}
+        onImportSuccess={(msg) => {
+          showToast('success', msg);
+          fetchProducts();
+        }}
+      />
 
       {/* Filters Bar */}
       <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -298,6 +370,7 @@ export default function ProductsPage() {
             <option value="instagram">Instagram</option>
             <option value="facebook">Facebook</option>
             <option value="mercadolibre">Mercado Libre</option>
+            <option value="import">CVS/Excel</option>
           </select>
 
           {/* Status */}
@@ -385,6 +458,9 @@ export default function ProductsPage() {
                         {prod.channels.includes('mercadolibre') && (
                           <div className="p-1 rounded-md bg-yellow-50 text-yellow-600" title="Mercado Libre"><MeliIcon className="h-3.5 w-3.5" /></div>
                         )}
+                        {prod.channels.includes('import') && (
+                          <div className="p-1 rounded-md bg-slate-100 text-slate-600" title="Importado masivamente"><FileSpreadsheet className="h-3.5 w-3.5" /></div>
+                        )}
                       </div>
                     </td>
                     <td className="p-4">
@@ -402,6 +478,15 @@ export default function ProductsPage() {
                         >
                           <Edit2 className="h-4 w-4" />
                         </button>
+                        {prod.channels.includes('mercadolibre') && (
+                          <button
+                            onClick={() => handleOpenQuestionsModal(prod)}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                            title="Ver preguntas"
+                          >
+                            <MessageSquare className="h-4 w-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDeleteProduct(prod._id)}
                           className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
@@ -416,6 +501,40 @@ export default function ProductsPage() {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Pagination Controls */}
+      <div className="mt-4 flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
+        <select
+          value={limit}
+          onChange={(e) => {
+            setLimit(Number(e.target.value));
+            setCurrentPage(1);
+          }}
+          className="text-xs border border-slate-200 rounded-xl px-3 py-1.5 text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+        >
+          {[5, 10, 15, 50].map((l) => (
+            <option key={l} value={l}>{l} productos por página</option>
+          ))}
+        </select>
+        <div className="flex items-center space-x-2 text-xs font-semibold text-slate-600">
+          <span className="text-slate-500 mr-4">Total: {totalProducts} productos</span>
+          <button
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            className="px-3 py-1.5 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition"
+          >
+            Anterior
+          </button>
+          <span className="text-slate-500">Página {currentPage} de {totalPages || 1}</span>
+          <button
+            disabled={currentPage === totalPages || totalPages === 0}
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            className="px-3 py-1.5 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition"
+          >
+            Siguiente
+          </button>
         </div>
       </div>
 
@@ -437,23 +556,25 @@ export default function ProductsPage() {
             <form onSubmit={handleSubmit} className="overflow-y-auto p-5 space-y-4 text-xs font-semibold text-slate-600 flex-1">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block mb-1.5">Nombre del producto</label>
+                  <label className="block mb-1.5">Nombre del producto {editingProduct?.channels.includes('mercadolibre') && <span className="text-[10px] text-slate-400">(No modificable en ML)</span>}</label>
                   <input
                     type="text"
                     required
                     value={name}
+                    readOnly={!!editingProduct?.channels.includes('mercadolibre')}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 bg-slate-50/20"
+                    className={`w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 ${editingProduct?.channels.includes('mercadolibre') ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50/20'}`}
                     placeholder="ej. Campera Nike Cortaviento"
                   />
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block mb-1.5">Descripción</label>
+                  <label className="block mb-1.5">Descripción {editingProduct?.channels.includes('mercadolibre') && <span className="text-[10px] text-slate-400">(No modificable en ML)</span>}</label>
                   <textarea
                     value={description}
+                    readOnly={!!editingProduct?.channels.includes('mercadolibre')}
                     onChange={(e) => setDescription(e.target.value)}
-                    className="w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 bg-slate-50/20 min-h-[60px]"
+                    className={`w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 min-h-[60px] ${editingProduct?.channels.includes('mercadolibre') ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50/20'}`}
                     placeholder="Detalles sobre el material, calce, etc..."
                   />
                 </div>
@@ -481,27 +602,34 @@ export default function ProductsPage() {
                 </div>
 
                 <div>
-                  <label className="block mb-1.5">SKU</label>
+                  <label className="block mb-1.5">SKU {editingProduct?.channels.includes('mercadolibre') && <span className="text-[10px] text-slate-400">(No modificable)</span>}</label>
                   <input
                     type="text"
                     value={sku}
+                    readOnly={!!editingProduct?.channels.includes('mercadolibre')}
                     onChange={(e) => setSku(e.target.value)}
-                    className="w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 bg-slate-50/20"
+                    className={`w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 ${editingProduct?.channels.includes('mercadolibre') ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50/20'}`}
                     placeholder="ej. NK-CAM-01"
                   />
                 </div>
 
                 {/* Image Upload — S3 */}
                 <div className="col-span-2">
-                  <label className="block mb-1.5">Imagen del producto</label>
+                  <label className="block mb-1.5">Imagen del producto {editingProduct?.channels.includes('mercadolibre') && <span className="text-[10px] text-slate-400">(No modificable en ML)</span>}</label>
                   <div
-                    className="relative border-2 border-dashed border-slate-200 rounded-xl overflow-hidden cursor-pointer hover:border-indigo-400 transition-colors group bg-slate-50/30"
-                    onClick={() => imageInputRef.current?.click()}
-                    onDragOver={(e) => e.preventDefault()}
+                    className={`relative border-2 border-dashed border-slate-200 rounded-xl overflow-hidden cursor-pointer hover:border-indigo-400 transition-colors group bg-slate-50/30 ${editingProduct?.channels.includes('mercadolibre') ? 'cursor-not-allowed' : ''}`}
+                    onClick={() => {
+                      if (!editingProduct?.channels.includes('mercadolibre')) {
+                        imageInputRef.current?.click();
+                      }
+                    }}
+                    onDragOver={(e) => !editingProduct?.channels.includes('mercadolibre') && e.preventDefault()}
                     onDrop={(e) => {
-                      e.preventDefault();
-                      const file = e.dataTransfer.files?.[0];
-                      if (file) handleImageFileChange(file);
+                      if (!editingProduct?.channels.includes('mercadolibre')) {
+                        e.preventDefault();
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) handleImageFileChange(file);
+                      }
                     }}
                   >
                     {/* Hidden native file input */}
@@ -515,6 +643,7 @@ export default function ProductsPage() {
                         if (file) handleImageFileChange(file);
                       }}
                     />
+
 
                     {imagePreview ? (
                       // Preview
@@ -548,43 +677,45 @@ export default function ProductsPage() {
                 </div>
 
                 <div>
-                  <label className="block mb-1.5">Talles (separados por coma)</label>
+                  <label className="block mb-1.5">Talles (separados por coma) {editingProduct?.channels.includes('mercadolibre') && <span className="text-[10px] text-slate-400">(No modificable)</span>}</label>
                   <input
                     type="text"
                     value={sizes}
+                    readOnly={!!editingProduct?.channels.includes('mercadolibre')}
                     onChange={(e) => setSizes(e.target.value)}
-                    className="w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 bg-slate-50/20"
+                    className={`w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 ${editingProduct?.channels.includes('mercadolibre') ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50/20'}`}
                     placeholder="ej. S, M, L"
                   />
                 </div>
 
                 <div>
-                  <label className="block mb-1.5">Colores (separados por coma)</label>
+                  <label className="block mb-1.5">Colores (separados por coma) {editingProduct?.channels.includes('mercadolibre') && <span className="text-[10px] text-slate-400">(No modificable)</span>}</label>
                   <input
                     type="text"
                     value={colors}
+                    readOnly={!!editingProduct?.channels.includes('mercadolibre')}
                     onChange={(e) => setColors(e.target.value)}
-                    className="w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 bg-slate-50/20"
+                    className={`w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 ${editingProduct?.channels.includes('mercadolibre') ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50/20'}`}
                     placeholder="ej. Negro, Azul"
                   />
                 </div>
 
                 <div>
-                  <label className="block mb-1.5">Canales sociales vinculados</label>
+                  <label className="block mb-1.5">Canales sociales vinculados {editingProduct?.channels.includes('mercadolibre') && <span className="text-[10px] text-slate-400">(No modificable)</span>}</label>
                   <div className="flex items-center space-x-3.5 mt-2">
                     <button
                       type="button"
+                      disabled={!!editingProduct?.channels.includes('mercadolibre')}
                       onClick={() => toggleChannel('instagram')}
-                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${channels.includes('instagram') ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-slate-50 text-slate-500 border-slate-200'
-                        }`}
+                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${channels.includes('instagram') ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-slate-50 text-slate-500 border-slate-200'} ${editingProduct?.channels.includes('mercadolibre') ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <InstagramIcon className="h-3.5 w-3.5" /> <span>Instagram</span>
                     </button>
                     <button
                       type="button"
+                      disabled={!!editingProduct?.channels.includes('mercadolibre')}
                       onClick={() => toggleChannel('facebook')}
-                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${channels.includes('facebook') ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'
-                        }`}
+                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${channels.includes('facebook') ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'} ${editingProduct?.channels.includes('mercadolibre') ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <FacebookIcon className="h-3.5 w-3.5" /> <span>Facebook</span>
                     </button>
@@ -636,6 +767,39 @@ export default function ProductsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* QUESTIONS MODAL */}
+      {questionsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setQuestionsModalOpen(false)}></div>
+
+          {/* Content container */}
+          <div className="relative bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-100 mx-4 overflow-hidden animate-slide-in flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h3 className="text-sm font-bold text-slate-800">Preguntas de Mercado Libre</h3>
+              <button onClick={() => setQuestionsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="h-4.5 w-4.5" /></button>
+            </div>
+
+            {/* Questions Body */}
+            <div className="overflow-y-auto p-5 space-y-4 text-xs font-semibold text-slate-600 flex-1">
+              {loadingQuestions ? (
+                <div className="flex items-center justify-center p-10"><Loader2 className="h-6 w-6 animate-spin text-indigo-600" /></div>
+              ) : currentQuestions.length === 0 ? (
+                <p className="text-center text-slate-400">No hay preguntas para este producto.</p>
+              ) : (
+                currentQuestions.map((q: { id: string, text: string, answer?: { text: string } }) => (
+                  <div key={q.id} className="p-3 bg-slate-50 rounded-xl space-y-1">
+                    <p className="text-slate-800">{q.text}</p>
+                    {q.answer && <p className="text-indigo-600">R: {q.answer.text}</p>}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}

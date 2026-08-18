@@ -12,4 +12,7 @@ router.get('/auth/callback', controller.handleOAuthCallback);
 router.get('/status', protect, controller.getMeliStatus);
 router.post('/disconnect', protect, controller.disconnectMeli);
 
+// Questions
+router.get('/items/:itemId/questions', protect, controller.getProductQuestions);
+
 export default router;

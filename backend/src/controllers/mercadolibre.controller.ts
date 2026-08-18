@@ -13,10 +13,37 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { Store } from '../models/Store';
 import { getOAuthUrl, exchangeCodeForToken } from '../services/mercadolibre.service';
+import { MeliProvider } from '../services/MeliProvider';
 import jwt from 'jsonwebtoken';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const JWT_SECRET = process.env.JWT_SECRET || 'socialflow_secret';
+
+// ---------------------------------------------------------------------------
+// GET /api/mercadolibre/items/:itemId/questions
+// ---------------------------------------------------------------------------
+
+export const getProductQuestions = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    const { itemId } = req.params;
+
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    const store = await Store.findById(storeId);
+    if (!store || !store.meliAccessToken) {
+      return res.status(400).json({ error: 'Tienda no conectada a Mercado Libre' });
+    }
+
+    const meliProvider = new MeliProvider(store.meliAccessToken);
+    const questions = await meliProvider.getQuestions(itemId);
+
+    return res.status(200).json(questions);
+  } catch (err: any) {
+    console.error('[MercadoLibre] getProductQuestions error:', err?.message);
+    return res.status(500).json({ error: 'Error al obtener preguntas de Mercado Libre' });
+  }
+};
 
 // ---------------------------------------------------------------------------
 // GET /api/mercadolibre/auth/url

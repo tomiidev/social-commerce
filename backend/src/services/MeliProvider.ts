@@ -8,6 +8,52 @@ export class MeliProvider {
     this.accessToken = accessToken;
   }
 
+  async getQuestions(itemId: string): Promise<any[]> {
+    if (!this.accessToken) {
+      throw new Error('No hay token de acceso para Mercado Libre');
+    }
+
+    try {
+      // Endpoint to search questions for an item
+      const response: { questions: any[] } = await callApi(
+        `/questions/search`,
+        'GET',
+        this.accessToken,
+        undefined,
+        { item_id: itemId }
+      );
+
+      return response.questions || [];
+    } catch (err: any) {
+      console.error(`[MeliProvider] Error fetching questions for item ${itemId}:`, err?.message);
+      throw new Error(`Error al obtener preguntas de Mercado Libre: ${err?.response?.data?.message || err?.message}`);
+    }
+  }
+
+  async updateProduct(meliItemId: string, data: any, description?: string): Promise<void> {
+    if (!this.accessToken) {
+      console.log(`[MeliProvider] Skipping remote update for ${meliItemId} (no token)`);
+      return;
+    }
+
+    try {
+      if (data && Object.keys(data).length > 0) {
+        console.log(`[MeliProvider] Updating item ${meliItemId} with payload:`, JSON.stringify(data));
+        await callApi(`/items/${meliItemId}`, 'PUT', this.accessToken, data);
+        console.log(`[MeliProvider] Successfully updated item ${meliItemId} on Mercado Libre`);
+      }
+
+      if (description !== undefined) {
+        console.log(`[MeliProvider] Updating description for item ${meliItemId}`);
+        await callApi(`/items/${meliItemId}/description`, 'PUT', this.accessToken, { plain_text: description });
+        console.log(`[MeliProvider] Successfully updated description for item ${meliItemId} on Mercado Libre`);
+      }
+    } catch (err: any) {
+      console.error(`[MeliProvider] Error updating item ${meliItemId} on Meli:`, err?.response?.data || err?.message);
+      throw new Error(`Error al actualizar producto en Mercado Libre: ${err?.response?.data?.message || err?.message}`);
+    }
+  }
+
   async syncProducts(_storeId: string): Promise<Partial<IProduct>[]> {
     // ── FALLBACK (development / no token) ───────────────────────────
     if (!this.accessToken) {
@@ -22,7 +68,7 @@ export class MeliProvider {
           sizes: ['S', 'M', 'L'],
           colors: ['Blanco', 'Gris'],
           image: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?q=80&w=300',
-          channels: ['mercadolibre'],
+          channels: ['mercadolibre'] as ('instagram' | 'facebook' | 'mercadolibre'| 'import')[],
           status: 'active',
         },
       ];
@@ -54,22 +100,36 @@ export class MeliProvider {
         { ids: itemIds }
       );
 
-      // 4. Map to IProduct
-      return itemsDetails.map((item) => {
+      // 4. Map to IProduct and fetch descriptions
+      const productsMapped = await Promise.all(itemsDetails.map(async (item) => {
         const product = item.body;
+        
+        // Fetch description separately
+        let description = '';
+        if (this.accessToken) {
+          try {
+            const desc: { plain_text: string } = await callApi(`/items/${product.id}/description`, 'GET', this.accessToken);
+            description = desc.plain_text;
+          } catch (e) {
+            console.warn(`[MeliProvider] Could not fetch description for ${product.id}`);
+          }
+        }
+
         return {
           name: product.title,
-          description: product.description || '',
+          description: description,
           price: product.price,
           stock: product.available_quantity,
           sku: product.seller_sku || product.id,
-          sizes: [], // Needs mapping based on Mercado Libre attributes if needed
-          colors: [], // Needs mapping based on Mercado Libre attributes if needed
+          sizes: [], // Needs mapping
+          colors: [], // Needs mapping
           image: product.thumbnail,
-          channels: ['mercadolibre'],
-          status: product.status === 'active' ? 'active' : 'inactive',
+          channels: ['mercadolibre'] as ('instagram' | 'facebook' | 'mercadolibre')[],
+          status: (product.status === 'active' ? 'active' : 'inactive') as 'active' | 'inactive',
         };
-      });
+      }));
+
+      return productsMapped;
     } catch (err: any) {
       console.error('[MeliProvider] Error syncing products from Meli:', err?.message);
       throw new Error('Error al sincronizar productos desde Mercado Libre');

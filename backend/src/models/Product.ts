@@ -11,7 +11,7 @@ export interface IProduct extends Document {
   colors: string[];
   image: string;
   queriesCount: number;
-  channels: ('instagram' | 'facebook' | 'mercadolibre')[];
+  channels: ('instagram' | 'facebook' | 'mercadolibre' | 'import')[];
   status: 'active' | 'inactive';
   createdAt: Date;
   updatedAt: Date;
@@ -29,7 +29,7 @@ const ProductSchema = new Schema<IProduct>(
     colors: [{ type: String }],
     image: { type: String, default: '' },
     queriesCount: { type: Number, default: 0 },
-    channels: [{ type: String, enum: ['instagram', 'facebook', 'mercadolibre'] }],
+    channels: [{ type: String, enum: ['instagram', 'facebook', 'mercadolibre', 'import'] }],
     status: { type: String, enum: ['active', 'inactive'], default: 'active', index: true },
   },
   { timestamps: true }

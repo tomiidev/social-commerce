@@ -12,7 +12,7 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    const { search, channel, status, sortBy, order } = req.query;
+    const { search, channel, status, sortBy, order, page, limit } = req.query;
 
     const query: any = { storeId: new mongoose.Types.ObjectId(storeId) };
 
@@ -20,7 +20,7 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
       query.name = { $regex: search, $options: 'i' };
     }
     if (channel) {
-       query.channels = { $in: [channel] }; 
+      query.channels = { $in: [channel] };
     }
     if (status) {
       query.status = status;
@@ -33,8 +33,22 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
       sortOptions = { [field]: sortOrder };
     }
 
-    const products = await Product.find(query).sort(sortOptions);
-    return res.status(200).json(products);
+    const currentPage = parseInt(page as string) || 1;
+    const perPage = parseInt(limit as string) || 15;
+
+    const total = await Product.countDocuments(query);
+    const products = await Product.find(query)
+      .sort(sortOptions)
+      .skip((currentPage - 1) * perPage)
+      .limit(perPage);
+
+    return res.status(200).json({
+      products,
+      total,
+      currentPage,
+      pages: Math.ceil(total / perPage),
+      perPage
+    });
   } catch (error: any) {
     console.error('Error fetching products:', error);
     return res.status(500).json({ error: 'Error al obtener productos' });
@@ -103,33 +117,59 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
 
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    const { name, description, price, stock, sku, sizes, colors, image, channels, status } = req.body;
-
-    const product = await Product.findOneAndUpdate(
-      { _id: id, storeId: new mongoose.Types.ObjectId(storeId) },
-      {
-        name,
-        description,
-        price,
-        stock,
-        sku,
-        sizes,
-        colors,
-        image,
-        channels,
-        status,
-      },
-      { new: true }
-    );
-
+    // 1. Get product and store
+    const product = await Product.findOne({ _id: id, storeId: new mongoose.Types.ObjectId(storeId) });
     if (!product) {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
 
-    return res.status(200).json(product);
+    const { name, description, price, stock, sku, sizes, colors, image, channels, status } = req.body;
+    
+    // Check if it's a Mercado Libre product
+    const isMeliProduct = product.channels.includes('mercadolibre');
+
+    const store = await Store.findById(storeId);
+
+    // 2. Sync with MercadoLibre if needed
+    if (isMeliProduct && channels?.includes('mercadolibre')) {
+      const meliProvider = new MeliProvider(store?.meliAccessToken || null);
+
+      // Map update fields to MELI format
+      const meliUpdateData = {
+        price: price,
+        available_quantity: stock,
+        status: status === 'active' ? 'active' : 'paused'
+      };
+
+      // We use product.sku as the MeliItemId if it's the identifier in our DB
+      await meliProvider.updateProduct(product.sku, meliUpdateData, description);
+    }
+
+    // 3. Update in MongoDB
+    // If it's a Meli product, restrict which fields we update from the body
+    const updateData: any = {
+      name: isMeliProduct ? product.name : name, // Restrict name if ML
+      description,
+      price,
+      stock,
+      sku: isMeliProduct ? product.sku : sku, // Restrict SKU if ML
+      sizes,
+      colors,
+      image: isMeliProduct ? product.image : image, // Restrict image if ML
+      channels,
+      status,
+    };
+
+    const updatedProduct = await Product.findOneAndUpdate(
+      { _id: id, storeId: new mongoose.Types.ObjectId(storeId) },
+      updateData,
+      { new: true }
+    );
+
+    return res.status(200).json(updatedProduct);
   } catch (error: any) {
     console.error('Error updating product:', error);
-    return res.status(500).json({ error: 'Error al editar producto' });
+    return res.status(500).json({ error: `Error al editar producto: ${error.message}` });
   }
 };
 
@@ -176,7 +216,7 @@ export const importProducts = async (req: AuthRequest, res: Response) => {
     const igSynced = await igProvider.syncProducts(storeId);
     const fbSynced = await fbProvider.syncProducts(storeId);
     const meliSynced = await meliProvider.syncProducts(storeId);
-
+    console.log(meliSynced)
     const allSynced = [...igSynced, ...fbSynced, ...meliSynced];
     const importedProducts = [];
 
@@ -205,7 +245,11 @@ export const importProducts = async (req: AuthRequest, res: Response) => {
         importedProducts.push(created);
       } else {
         // Just update stock
-        existing.stock += item.stock || 0;
+        existing.name = item.name || existing.name;
+        existing.description = item.description || existing.description;
+        existing.price = item.price || existing.price;
+        existing.stock = item.stock ?? existing.stock;
+        existing.status = item.status || existing.status;
         await existing.save();
         importedProducts.push(existing);
       }
@@ -240,5 +284,98 @@ export const uploadProductImage = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error uploading product image to S3:', error);
     return res.status(500).json({ error: 'Error al subir imagen a S3' });
+  }
+};
+
+/**
+ * Creates multiple products in a bulk operation
+ */
+export const bulkCreateProducts = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    const { products } = req.body;
+
+    if (!products || !Array.isArray(products)) {
+      return res.status(400).json({ error: 'Se requiere una lista de productos' });
+    }
+
+    const createdProducts = [];
+    const errors = [];
+
+    for (let i = 0; i < products.length; i++) {
+      const item = products[i];
+      
+      if (!item.name) {
+        errors.push({ index: i, error: 'El nombre es obligatorio' });
+        continue;
+      }
+      
+      if (item.price === undefined || item.price === null || isNaN(Number(item.price))) {
+        errors.push({ index: i, error: 'El precio es obligatorio y debe ser un número' });
+        continue;
+      }
+
+      // Format sizes and colors
+      let sizesArr: string[] = [];
+      if (Array.isArray(item.sizes)) {
+        sizesArr = item.sizes.map((s: any) => String(s).trim()).filter(Boolean);
+      } else if (typeof item.sizes === 'string') {
+        sizesArr = item.sizes.split(',').map((s: string) => s.trim()).filter(Boolean);
+      }
+
+      let colorsArr: string[] = [];
+      if (Array.isArray(item.colors)) {
+        colorsArr = item.colors.map((c: any) => String(c).trim()).filter(Boolean);
+      } else if (typeof item.colors === 'string') {
+        colorsArr = item.colors.split(',').map((c: string) => c.trim()).filter(Boolean);
+      }
+
+      let channelsArr: ('instagram' | 'facebook' | 'mercadolibre' | 'import')[] = ['import'];
+      if (Array.isArray(item.channels)) {
+        channelsArr = item.channels.filter((c: any) => ['instagram', 'facebook', 'mercadolibre', 'import'].includes(c));
+      } else if (typeof item.channels === 'string') {
+        channelsArr = item.channels
+          .split(',')
+          .map((c: string) => c.trim().toLowerCase())
+          .filter((c: string) => ['instagram', 'facebook', 'mercadolibre', 'import'].includes(c)) as any;
+      }
+
+      if (channelsArr.length === 0) {
+        channelsArr = ['import'];
+      }
+
+      try {
+        const productData = {
+          storeId: new mongoose.Types.ObjectId(storeId),
+          name: String(item.name).trim(),
+          description: item.description ? String(item.description).trim() : '',
+          price: Number(item.price),
+          stock: item.stock !== undefined && item.stock !== null ? Number(item.stock) : 0,
+          sku: item.sku ? String(item.sku).trim() : '',
+          sizes: sizesArr,
+          colors: colorsArr,
+          image: item.image || 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?q=80&w=300',
+          channels: channelsArr,
+          status: item.status === 'inactive' ? 'inactive' : 'active',
+        };
+
+        const created = await Product.create(productData);
+        createdProducts.push(created);
+      } catch (err: any) {
+        errors.push({ index: i, name: item.name, error: err.message });
+      }
+    }
+
+    return res.status(201).json({
+      message: `Se importaron ${createdProducts.length} productos correctamente.`,
+      count: createdProducts.length,
+      products: createdProducts,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error: any) {
+    console.error('Error in bulk creation:', error);
+    return res.status(500).json({ error: `Error al crear productos en lote: ${error.message}` });
   }
 };
