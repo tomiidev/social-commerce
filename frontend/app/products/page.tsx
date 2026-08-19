@@ -453,7 +453,7 @@ export default function ProductsPage() {
                         <span className="text-[10px] text-slate-400">{prod.sku || 'Sin SKU'}</span>
                       </div>
                     </td>
-                    <td className="p-4 text-slate-800 font-bold">${prod.price.toLocaleString('es-UY')}</td>
+                    <td className="p-4 text-slate-800 font-bold">${(prod.price ?? 0).toLocaleString('es-UY')}</td>
                     <td className="p-4">
                       <span className={`px-2 py-0.5 rounded text-[10px] ${prod.stock <= 3 ? 'bg-rose-50 text-rose-600 font-semibold' : 'bg-slate-100 text-slate-600'
                         }`}>
