@@ -18,7 +18,7 @@ import {
   MessageSquare,
   FileSpreadsheet
 } from 'lucide-react';
-import { InstagramIcon, FacebookIcon, MeliIcon } from '../../components/SocialIcons';
+import { InstagramIcon, FacebookIcon, MeliIcon, ShopifyIcon } from '../../components/SocialIcons';
 import ProductImporter from '../../components/ProductImporter';
 
 interface Product {
@@ -32,7 +32,7 @@ interface Product {
   colors: string[];
   image: string;
   queriesCount: number;
-  channels: ('instagram' | 'facebook' | 'mercadolibre' | 'import')[];
+  channels: ('instagram' | 'facebook' | 'mercadolibre' | 'shopify' | 'import')[];
   status: 'active' | 'inactive';
 }
 
@@ -44,6 +44,13 @@ export default function ProductsPage() {
   const [channelFilter, setChannelFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   
+  // Channels connection state
+  const [availableChannels, setAvailableChannels] = useState<{
+    meta: boolean;
+    mercadolibre: boolean;
+    shopify: boolean;
+  }>({ meta: false, mercadolibre: false, shopify: false });
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [limit, setLimit] = useState(15);
@@ -59,6 +66,19 @@ export default function ProductsPage() {
 
     return () => clearTimeout(handler);
   }, [search]);
+
+  // Fetch connections status
+  useEffect(() => {
+    const fetchConnections = async () => {
+      try {
+        const res = await api.get('/auth/connections');
+        setAvailableChannels(res.data);
+      } catch (err) {
+        console.error('Error fetching connections:', err);
+      }
+    };
+    fetchConnections();
+  }, []);
 
   // Import Meta state
   const [importing, setImporting] = useState(false);
@@ -101,7 +121,7 @@ export default function ProductsPage() {
   const [imagePreview, setImagePreview] = useState<string>('');
   const [imageUploading, setImageUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const [channels, setChannels] = useState<('instagram' | 'facebook' | 'mercadolibre' | 'import')[]>(['instagram']);
+  const [channels, setChannels] = useState<('instagram' | 'facebook' | 'mercadolibre' | 'import' | 'shopify')[]>(['instagram']);
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
 
   // Notifications
@@ -113,7 +133,6 @@ export default function ProductsPage() {
   };
 
   const fetchProducts = async (isManual: boolean = false) => {
-    // Si no es una llamada manual (como un cambio de búsqueda), y ya estamos cargando, evitamos refrescos innecesarios
     if (!isManual && loading) return;
 
     setLoading(true);
@@ -125,7 +144,6 @@ export default function ProductsPage() {
 
       const res = await api.get(url);
       
-      // Actualizamos los estados en un solo batch lógico
       setProducts(res.data.products);
       setTotalProducts(res.data.total);
       setTotalPages(res.data.pages);
@@ -204,7 +222,6 @@ export default function ProductsPage() {
 
     let finalImageUrl = image;
 
-    // If a new file was selected, upload it to S3 first
     if (imageFile) {
       setImageUploading(true);
       try {
@@ -238,12 +255,10 @@ export default function ProductsPage() {
 
     try {
       if (editingProduct) {
-        // Edit Mode
         const res = await api.put(`/products/${editingProduct._id}`, payload);
         setProducts(prev => prev.map(p => p._id === editingProduct._id ? res.data : p));
         showToast('success', 'Producto actualizado correctamente');
       } else {
-        // Create Mode
         const res = await api.post('/products', payload);
         setProducts(prev => [res.data, ...prev]);
         showToast('success', 'Producto creado correctamente');
@@ -360,7 +375,6 @@ export default function ProductsPage() {
 
         {/* Filters */}
         <div className="flex items-center gap-3.5 text-xs font-semibold text-slate-600">
-          {/* Channel */}
           <select
             value={channelFilter}
             onChange={(e) => setChannelFilter(e.target.value)}
@@ -370,10 +384,10 @@ export default function ProductsPage() {
             <option value="instagram">Instagram</option>
             <option value="facebook">Facebook</option>
             <option value="mercadolibre">Mercado Libre</option>
+            <option value="shopify">Shopify</option>
             <option value="import">CVS/Excel</option>
           </select>
 
-          {/* Status */}
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -457,6 +471,9 @@ export default function ProductsPage() {
                         )}
                         {prod.channels.includes('mercadolibre') && (
                           <div className="p-1 rounded-md bg-yellow-50 text-yellow-600" title="Mercado Libre"><MeliIcon className="h-3.5 w-3.5" /></div>
+                        )}
+                        {prod.channels.includes('shopify') && (
+                          <div className="p-1 rounded-md bg-indigo-50 text-indigo-600" title="Shopify"><ShopifyIcon className="h-3.5 w-3.5" /></div>
                         )}
                         {prod.channels.includes('import') && (
                           <div className="p-1 rounded-md bg-slate-100 text-slate-600" title="Importado masivamente"><FileSpreadsheet className="h-3.5 w-3.5" /></div>
@@ -701,24 +718,44 @@ export default function ProductsPage() {
                 </div>
 
                 <div>
-                  <label className="block mb-1.5">Canales sociales vinculados {editingProduct?.channels.includes('mercadolibre') && <span className="text-[10px] text-slate-400">(No modificable)</span>}</label>
-                  <div className="flex items-center space-x-3.5 mt-2">
-                    <button
-                      type="button"
-                      disabled={!!editingProduct?.channels.includes('mercadolibre')}
-                      onClick={() => toggleChannel('instagram')}
-                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${channels.includes('instagram') ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-slate-50 text-slate-500 border-slate-200'} ${editingProduct?.channels.includes('mercadolibre') ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      <InstagramIcon className="h-3.5 w-3.5" /> <span>Instagram</span>
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!!editingProduct?.channels.includes('mercadolibre')}
-                      onClick={() => toggleChannel('facebook')}
-                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${channels.includes('facebook') ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'} ${editingProduct?.channels.includes('mercadolibre') ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      <FacebookIcon className="h-3.5 w-3.5" /> <span>Facebook</span>
-                    </button>
+                  <label className="block mb-1.5">Canales sociales vinculados {editingProduct?.channels.includes('mercadolibre') && <span className="text-[10px] text-slate-400">(No modificable en ML)</span>}</label>
+                  <div className="flex flex-wrap items-center gap-3 mt-2">
+                    {availableChannels.meta && (
+                      <button
+                        type="button"
+                        disabled={!!editingProduct?.channels.includes('mercadolibre')}
+                        onClick={() => toggleChannel('instagram')}
+                        className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${channels.includes('instagram') ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-slate-50 text-slate-500 border-slate-200'} ${editingProduct?.channels.includes('mercadolibre') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <InstagramIcon className="h-3.5 w-3.5" /> <span>Instagram</span>
+                      </button>
+                    )}
+                    {availableChannels.meta && (
+                      <button
+                        type="button"
+                        disabled={!!editingProduct?.channels.includes('mercadolibre')}
+                        onClick={() => toggleChannel('facebook')}
+                        className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${channels.includes('facebook') ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'} ${editingProduct?.channels.includes('mercadolibre') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <FacebookIcon className="h-3.5 w-3.5" /> <span>Facebook</span>
+                      </button>
+                    )}
+                    {availableChannels.shopify && (
+                       <button
+                       type="button"
+                       onClick={() => {
+                         const ch = 'shopify';
+                         if (channels.includes(ch)) {
+                            setChannels(channels.filter(c => c !== ch));
+                         } else {
+                            setChannels([...channels, ch] as any);
+                         }
+                       }}
+                       className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${channels.includes('shopify') ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}
+                     >
+                       <ShopifyIcon className="h-3.5 w-3.5" /> <span>Shopify</span>
+                     </button>
+                    )}
                   </div>
                 </div>
 

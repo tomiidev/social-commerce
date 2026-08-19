@@ -30,27 +30,30 @@ export class MeliProvider {
     }
   }
 
-  async updateProduct(meliItemId: string, data: any, description?: string): Promise<void> {
+  async createProduct(product: any): Promise<any> {
     if (!this.accessToken) {
-      console.log(`[MeliProvider] Skipping remote update for ${meliItemId} (no token)`);
-      return;
+      throw new Error('No hay token de acceso para Mercado Libre');
     }
 
     try {
-      if (data && Object.keys(data).length > 0) {
-        console.log(`[MeliProvider] Updating item ${meliItemId} with payload:`, JSON.stringify(data));
-        await callApi(`/items/${meliItemId}`, 'PUT', this.accessToken, data);
-        console.log(`[MeliProvider] Successfully updated item ${meliItemId} on Mercado Libre`);
-      }
+      const payload = {
+        title: product.name,
+        category_id: 'MLA3530', // Default category ID for testing - needs mapping in production
+        price: product.price,
+        currency_id: 'UYU',
+        available_quantity: product.stock,
+        buying_mode: 'buy_it_now',
+        listing_type_id: 'gold_special',
+        condition: 'new',
+        description: { plain_text: product.description },
+        pictures: [{ source: product.image }]
+      };
 
-      if (description !== undefined) {
-        console.log(`[MeliProvider] Updating description for item ${meliItemId}`);
-        await callApi(`/items/${meliItemId}/description`, 'PUT', this.accessToken, { plain_text: description });
-        console.log(`[MeliProvider] Successfully updated description for item ${meliItemId} on Mercado Libre`);
-      }
+      const response = await callApi('/items', 'POST', this.accessToken, payload);
+      return response;
     } catch (err: any) {
-      console.error(`[MeliProvider] Error updating item ${meliItemId} on Meli:`, err?.response?.data || err?.message);
-      throw new Error(`Error al actualizar producto en Mercado Libre: ${err?.response?.data?.message || err?.message}`);
+      console.error(`[MeliProvider] Error creating product on Meli:`, err?.response?.data || err?.message);
+      throw new Error(`Error al publicar producto en Mercado Libre: ${err?.response?.data?.message || err?.message}`);
     }
   }
 

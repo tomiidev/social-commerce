@@ -46,3 +46,20 @@ export const MeliIcon: React.FC<IconProps> = ({ className = 'h-5 w-5' }) => (
     <path d="M496 256c0 137-111 248-248 248S0 393 0 256 111 8 248 8s248 111 248 248zM143.6 208.6l103-60.8v40.3l-68.5 40.5 68.5 40.5v40.3l-103-60.8zM368.4 208.6l-103 60.8v-40.3l68.5-40.5-68.5-40.5v-40.3l103 60.8z" />
   </svg>
 );
+
+export const ShopifyIcon: React.FC<IconProps> = ({ className = 'h-5 w-5' }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.75"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M20 9v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9" />
+    <path d="M9 22V8a3 3 0 0 1 6 0v14" />
+    <path d="M3 6h18a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z" />
+  </svg>
+);

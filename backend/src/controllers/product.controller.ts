@@ -106,6 +106,48 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'El nombre y precio son requeridos' });
     }
 
+    const store = await Store.findById(storeId);
+    if (!store) return res.status(404).json({ error: 'Tienda no encontrada' });
+
+    const errors: string[] = [];
+    const publishedChannels: string[] = [];
+
+    // Handle Shopify publishing
+    if (channels?.includes('shopify')) {
+      if (store.shopifyConnected) {
+        try {
+          await ShopifyService.createProduct(store.shopifyShopUrl!, store.shopifyAccessToken!, {
+            name, description, price, stock, sku, status
+          });
+          publishedChannels.push('Shopify');
+        } catch (err: any) {
+          console.error('Error publishing to Shopify:', err);
+          errors.push('Error al publicar en Shopify: ' + err.message);
+        }
+      } else {
+        errors.push('Shopify no está conectado');
+      }
+    }
+
+    // Handle Mercado Libre publishing
+    if (channels?.includes('mercadolibre')) {
+      if (store.meliConnected) {
+        try {
+          const meliProvider = new MeliProvider(store.meliAccessToken || null);
+          await meliProvider.createProduct({
+            name, description, price, stock, image
+          });
+          publishedChannels.push('Mercado Libre');
+        } catch (err: any) {
+          console.error('Error publishing to Mercado Libre:', err);
+          errors.push('Error al publicar en Mercado Libre: ' + err.message);
+        }
+      } else {
+        errors.push('Mercado Libre no está conectado');
+      }
+    }
+
+    // Always create in MongoDB
     const newProduct = await Product.create({
       storeId: new mongoose.Types.ObjectId(storeId),
       name,
@@ -120,10 +162,15 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
       status: status || 'active',
     });
 
-    return res.status(201).json(newProduct);
+    return res.status(201).json({
+      product: newProduct,
+      message: 'Producto procesado',
+      publishedChannels,
+      errors: errors.length > 0 ? errors : undefined
+    });
   } catch (error: any) {
     console.error('Error creating product:', error);
-    return res.status(500).json({ error: 'Error al crear producto' });
+    return res.status(500).json({ error: 'Error interno al crear producto' });
   }
 };
 

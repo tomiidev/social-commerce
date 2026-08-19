@@ -31,4 +31,24 @@ export class ShopifyService {
       status: p.status === 'active' ? 'active' : 'inactive',
     }));
   }
+
+  static async createProduct(shopUrl: string, accessToken: string, product: any) {
+    const client = this.getClient(shopUrl, accessToken);
+    
+    const shopifyProduct = {
+      product: {
+        title: product.name,
+        body_html: product.description,
+        variants: [{
+          price: product.price,
+          inventory_quantity: product.stock,
+          sku: product.sku,
+        }],
+        status: product.status === 'active' ? 'active' : 'draft',
+      }
+    };
+
+    const response = await client.post('/products.json', shopifyProduct);
+    return response.data.product;
+  }
 }

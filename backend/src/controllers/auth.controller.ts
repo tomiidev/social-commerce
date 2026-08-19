@@ -153,3 +153,22 @@ export const me = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({ error: 'Error del servidor' });
   }
 };
+
+export const getConnections = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    const store = await Store.findById(storeId).select('metaConnected meliConnected shopifyConnected');
+    if (!store) return res.status(404).json({ error: 'Tienda no encontrada' });
+
+    return res.status(200).json({
+      meta: store.metaConnected,
+      mercadolibre: store.meliConnected,
+      shopify: store.shopifyConnected
+    });
+  } catch (error: any) {
+    console.error('getConnections error:', error);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+};
