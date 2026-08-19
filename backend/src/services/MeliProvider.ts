@@ -57,6 +57,30 @@ export class MeliProvider {
     }
   }
 
+  async updateProduct(meliItemId: string, data: any, description?: string): Promise<void> {
+    if (!this.accessToken) {
+      console.log(`[MeliProvider] Skipping remote update for ${meliItemId} (no token)`);
+      return;
+    }
+
+    try {
+      if (data && Object.keys(data).length > 0) {
+        console.log(`[MeliProvider] Updating item ${meliItemId} with payload:`, JSON.stringify(data));
+        await callApi(`/items/${meliItemId}`, 'PUT', this.accessToken, data);
+        console.log(`[MeliProvider] Successfully updated item ${meliItemId} on Mercado Libre`);
+      }
+
+      if (description !== undefined) {
+        console.log(`[MeliProvider] Updating description for item ${meliItemId}`);
+        await callApi(`/items/${meliItemId}/description`, 'PUT', this.accessToken, { plain_text: description });
+        console.log(`[MeliProvider] Successfully updated description for item ${meliItemId} on Mercado Libre`);
+      }
+    } catch (err: any) {
+      console.error(`[MeliProvider] Error updating item ${meliItemId} on Meli:`, err?.response?.data || err?.message);
+      throw new Error(`Error al actualizar producto en Mercado Libre: ${err?.response?.data?.message || err?.message}`);
+    }
+  }
+
   async syncProducts(_storeId: string): Promise<Partial<IProduct>[]> {
     // ── FALLBACK (development / no token) ───────────────────────────
     if (!this.accessToken) {
