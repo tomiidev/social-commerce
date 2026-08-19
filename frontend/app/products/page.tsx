@@ -123,6 +123,15 @@ export default function ProductsPage() {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [channels, setChannels] = useState<('instagram' | 'facebook' | 'mercadolibre' | 'import' | 'shopify')[]>(['instagram']);
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
+  
+  // Shopify specific
+  const [vendor, setVendor] = useState('');
+  const [productType, setProductType] = useState('');
+  const [tags, setTags] = useState('');
+  const [compareAtPrice, setCompareAtPrice] = useState<number | ''>('');
+  const [weight, setWeight] = useState<number | ''>('');
+  const [weightUnit, setWeightUnit] = useState('kg');
+  const [barcode, setBarcode] = useState('');
 
   // Notifications
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -250,7 +259,14 @@ export default function ProductsPage() {
       colors: colors.split(',').map(c => c.trim()).filter(Boolean),
       image: finalImageUrl,
       channels,
-      status
+      status,
+      vendor,
+      productType,
+      tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+      compareAtPrice: compareAtPrice !== '' ? Number(compareAtPrice) : undefined,
+      weight: weight !== '' ? Number(weight) : undefined,
+      weightUnit,
+      barcode
     };
 
     try {
@@ -463,19 +479,19 @@ export default function ProductsPage() {
                     <td className="p-4 font-bold text-slate-500">{prod.queriesCount || 0}</td>
                     <td className="p-4">
                       <div className="flex items-center space-x-1.5">
-                        {prod.channels.includes('instagram') && (
+                        {prod.channels?.includes('instagram') && (
                           <div className="p-1 rounded-md bg-pink-50 text-pink-600" title="Instagram Feed"><InstagramIcon className="h-3.5 w-3.5" /></div>
                         )}
-                        {prod.channels.includes('facebook') && (
+                        {prod.channels?.includes('facebook') && (
                           <div className="p-1 rounded-md bg-blue-50 text-blue-600" title="Facebook Page"><FacebookIcon className="h-3.5 w-3.5" /></div>
                         )}
-                        {prod.channels.includes('mercadolibre') && (
+                        {prod.channels?.includes('mercadolibre') && (
                           <div className="p-1 rounded-md bg-yellow-50 text-yellow-600" title="Mercado Libre"><MeliIcon className="h-3.5 w-3.5" /></div>
                         )}
-                        {prod.channels.includes('shopify') && (
+                        {prod.channels?.includes('shopify') && (
                           <div className="p-1 rounded-md bg-indigo-50 text-indigo-600" title="Shopify"><ShopifyIcon className="h-3.5 w-3.5" /></div>
                         )}
-                        {prod.channels.includes('import') && (
+                        {prod.channels?.includes('import') && (
                           <div className="p-1 rounded-md bg-slate-100 text-slate-600" title="Importado masivamente"><FileSpreadsheet className="h-3.5 w-3.5" /></div>
                         )}
                       </div>
@@ -748,7 +764,7 @@ export default function ProductsPage() {
                          if (channels.includes(ch)) {
                             setChannels(channels.filter(c => c !== ch));
                          } else {
-                            setChannels([...channels, ch] as any);
+                            setChannels([...channels, ch] as never);
                          }
                        }}
                        className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${channels.includes('shopify') ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}
@@ -758,6 +774,87 @@ export default function ProductsPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Shopify Specific Fields */}
+                {channels.includes('shopify') && (
+                  <div className="col-span-2 border-t border-slate-100 pt-4 mt-2">
+                    <h4 className="text-xs font-bold text-slate-800 mb-3 flex items-center">
+                      <ShopifyIcon className="h-3.5 w-3.5 mr-1.5" /> Campos de Shopify
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block mb-1.5">Vendor (Marca)</label>
+                        <input
+                          type="text"
+                          value={vendor}
+                          onChange={(e) => setVendor(e.target.value)}
+                          className="w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 bg-slate-50/20"
+                          placeholder="ej. Nike"
+                        />
+                      </div>
+                      <div>
+                        <label className="block mb-1.5">Tipo de Producto</label>
+                        <input
+                          type="text"
+                          value={productType}
+                          onChange={(e) => setProductType(e.target.value)}
+                          className="w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 bg-slate-50/20"
+                          placeholder="ej. Ropa"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block mb-1.5">Tags (separados por coma)</label>
+                        <input
+                          type="text"
+                          value={tags}
+                          onChange={(e) => setTags(e.target.value)}
+                          className="w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 bg-slate-50/20"
+                          placeholder="ej. invierno, oferta, nuevo"
+                        />
+                      </div>
+                      <div>
+                        <label className="block mb-1.5">Precio de comparación</label>
+                        <input
+                          type="number"
+                          value={compareAtPrice}
+                          onChange={(e) => setCompareAtPrice(Number(e.target.value))}
+                          className="w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 bg-slate-50/20"
+                        />
+                      </div>
+                      <div>
+                         <label className="block mb-1.5">Código de barras</label>
+                        <input
+                          type="text"
+                          value={barcode}
+                          onChange={(e) => setBarcode(e.target.value)}
+                          className="w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 bg-slate-50/20"
+                        />
+                      </div>
+                      <div>
+                        <label className="block mb-1.5">Peso</label>
+                        <input
+                          type="number"
+                          value={weight}
+                          onChange={(e) => setWeight(Number(e.target.value))}
+                          className="w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 bg-slate-50/20"
+                        />
+                      </div>
+                      <div>
+                        <label className="block mb-1.5">Unidad de peso</label>
+                        <select
+                          value={weightUnit}
+                          onChange={(e) => setWeightUnit(e.target.value)}
+                          className="w-full border border-slate-200 px-3 py-2 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 bg-slate-50/20"
+                        >
+                          <option value="kg">kg</option>
+                          <option value="g">g</option>
+                          <option value="lb">lb</option>
+                          <option value="oz">oz</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block mb-1.5">Estado</label>

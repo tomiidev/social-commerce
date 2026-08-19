@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { Product } from '../models/Product';
 import { Store } from '../models/Store';
+import { StoreConnections } from '../models/StoreConnections';
 import { InstagramProvider, FacebookProvider } from '../services/SocialProvider';
 import { MeliProvider } from '../services/MeliProvider';
 import { ShopifyService } from '../services/shopify.service';
@@ -100,7 +101,10 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    const { name, description, price, stock, sku, sizes, colors, image, channels, status } = req.body;
+    const { 
+      name, description, price, stock, sku, sizes, colors, image, channels, status,
+      vendor, productType, tags, compareAtPrice, weight, weightUnit, barcode
+    } = req.body;
 
     if (!name || price === undefined) {
       return res.status(400).json({ error: 'El nombre y precio son requeridos' });
@@ -108,16 +112,19 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
 
     const store = await Store.findById(storeId);
     if (!store) return res.status(404).json({ error: 'Tienda no encontrada' });
+    
+    const connections = await StoreConnections.findOne({ storeId: new mongoose.Types.ObjectId(storeId) });
 
     const errors: string[] = [];
     const publishedChannels: string[] = [];
 
     // Handle Shopify publishing
     if (channels?.includes('shopify')) {
-      if (store.shopifyConnected) {
+      if (connections?.shopifyConnected) {
         try {
-          await ShopifyService.createProduct(store.shopifyShopUrl!, store.shopifyAccessToken!, {
-            name, description, price, stock, sku, status
+          await ShopifyService.createProduct(connections.shopifyShopUrl!, connections.shopifyAccessToken!, {
+            name, description, price, stock, sku, status,
+            vendor, productType, tags, compareAtPrice, weight, weightUnit, barcode
           });
           publishedChannels.push('Shopify');
         } catch (err: any) {
@@ -131,9 +138,9 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
 
     // Handle Mercado Libre publishing
     if (channels?.includes('mercadolibre')) {
-      if (store.meliConnected) {
+      if (connections?.meliConnected) {
         try {
-          const meliProvider = new MeliProvider(store.meliAccessToken || null);
+          const meliProvider = new MeliProvider(connections.meliAccessToken || null);
           await meliProvider.createProduct({
             name, description, price, stock, image
           });
@@ -160,6 +167,13 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
       image: image || 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?q=80&w=300',
       channels: channels || ['instagram'],
       status: status || 'active',
+      vendor,
+      productType,
+      tags,
+      compareAtPrice,
+      weight,
+      weightUnit,
+      barcode
     });
 
     return res.status(201).json({
@@ -192,11 +206,11 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
     // Check if it's a Mercado Libre product
     const isMeliProduct = product.channels.includes('mercadolibre');
 
-    const store = await Store.findById(storeId);
+    const connections = await StoreConnections.findOne({ storeId: new mongoose.Types.ObjectId(storeId) });
 
     // 2. Sync with MercadoLibre if needed
     if (isMeliProduct && channels?.includes('mercadolibre')) {
-      const meliProvider = new MeliProvider(store?.meliAccessToken || null);
+      const meliProvider = new MeliProvider(connections?.meliAccessToken || null);
 
       // Map update fields to MELI format
       const meliUpdateData = {
@@ -269,18 +283,18 @@ export const importProducts = async (req: AuthRequest, res: Response) => {
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
     // Fetch store for credentials
-    const store = await Store.findById(storeId);
+    const connections = await StoreConnections.findOne({ storeId: new mongoose.Types.ObjectId(storeId) });
 
     // Instantiating providers through clean abstractions
     const igProvider = new InstagramProvider();
     const fbProvider = new FacebookProvider();
-    const meliProvider = new MeliProvider(store?.meliAccessToken || null);
+    const meliProvider = new MeliProvider(connections?.meliAccessToken || null);
 
     // Call sync on provider instances
     const igSynced = await igProvider.syncProducts(storeId);
     const fbSynced = await fbProvider.syncProducts(storeId);
     const meliSynced = await meliProvider.syncProducts(storeId);
-    const shopifySynced = await ShopifyService.syncProducts(storeId, store?.shopifyShopUrl, store?.shopifyAccessToken);
+    const shopifySynced = await ShopifyService.syncProducts(storeId, connections?.shopifyShopUrl, connections?.shopifyAccessToken);
     
     const allSynced = [...igSynced, ...fbSynced, ...meliSynced, ...shopifySynced];
     const importedProducts = [];

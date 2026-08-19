@@ -11,6 +11,7 @@ const envPath = fs.existsSync(path.join(__dirname, '../../.env'))
 dotenv.config({ path: envPath });
 
 import { Store } from '../models/Store';
+import { StoreConnections } from '../models/StoreConnections';
 import { User } from '../models/User';
 import { Product } from '../models/Product';
 import { Post } from '../models/Post';
@@ -32,6 +33,7 @@ async function seed() {
     // Clear existing data
     console.log('Clearing old data...');
     await Store.deleteMany({});
+    await StoreConnections.deleteMany({});
     await User.deleteMany({});
     await Product.deleteMany({});
     await Post.deleteMany({});
@@ -51,6 +53,10 @@ async function seed() {
       logo: 'https://images.unsplash.com/photo-1544816155-12df9643f363?q=80&w=150',
     });
     console.log('Created Store:', store.name, 'with ID:', store._id);
+
+    // Create empty StoreConnections
+    await StoreConnections.create({ storeId: store._id });
+    console.log('Created empty StoreConnections for Store.');
 
     // 2. Create User
     console.log('Seeding User...');

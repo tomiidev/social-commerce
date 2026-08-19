@@ -11,13 +11,14 @@
 
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { Store } from '../models/Store';
+import { StoreConnections } from '../models/StoreConnections';
 import { MeliQuestion } from '../models/MeliQuestion';
 import { Product } from '../models/Product';
 import { Event } from '../models/Event';
 import { getOAuthUrl, exchangeCodeForToken } from '../services/mercadolibre.service';
 import { MeliProvider } from '../services/MeliProvider';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const JWT_SECRET = process.env.JWT_SECRET || 'socialflow_secret';
@@ -33,12 +34,12 @@ export const getProductQuestions = async (req: AuthRequest, res: Response) => {
 
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    const store = await Store.findById(storeId);
-    if (!store || !store.meliAccessToken) {
+    const connections = await StoreConnections.findOne({ storeId: new mongoose.Types.ObjectId(storeId) });
+    if (!connections || !connections.meliAccessToken) {
       return res.status(400).json({ error: 'Tienda no conectada a Mercado Libre' });
     }
 
-    const meliProvider = new MeliProvider(store.meliAccessToken);
+    const meliProvider = new MeliProvider(connections.meliAccessToken);
     const questions = await meliProvider.getQuestions(itemId);
 
     // Save/Update questions in database and update product queries count
@@ -116,12 +117,16 @@ export const handleOAuthCallback = async (req: Request, res: Response) => {
 
     const tokens = await exchangeCodeForToken(code);
 
-    await Store.findByIdAndUpdate(storeId, {
-      meliConnected: true,
-      meliAccessToken: tokens.access_token,
-      meliRefreshToken: tokens.refresh_token,
-      meliTokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
-    });
+    await StoreConnections.findOneAndUpdate(
+      { storeId: new mongoose.Types.ObjectId(storeId) },
+      {
+        meliConnected: true,
+        meliAccessToken: tokens.access_token,
+        meliRefreshToken: tokens.refresh_token,
+        meliTokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+      },
+      { upsert: true }
+    );
 
     console.log(`[MercadoLibre] Store ${storeId} connected`);
 
@@ -141,11 +146,11 @@ export const getMeliStatus = async (req: AuthRequest, res: Response) => {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    const store = await Store.findById(storeId).select('meliConnected');
+    const connections = await StoreConnections.findOne({ storeId: new mongoose.Types.ObjectId(storeId) }).select('meliConnected');
 
-    if (!store) return res.status(404).json({ error: 'Tienda no encontrada' });
+    if (!connections) return res.status(404).json({ error: 'Conexiones no encontradas' });
 
-    return res.status(200).json({ connected: store.meliConnected });
+    return res.status(200).json({ connected: connections.meliConnected });
   } catch (err: any) {
     console.error('[MercadoLibre] getMeliStatus error:', err?.message);
     return res.status(500).json({ error: 'Error al obtener estado de conexión' });
@@ -161,12 +166,15 @@ export const disconnectMeli = async (req: AuthRequest, res: Response) => {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    await Store.findByIdAndUpdate(storeId, {
-      meliConnected: false,
-      meliAccessToken: '',
-      meliRefreshToken: '',
-      meliTokenExpiresAt: null,
-    });
+    await StoreConnections.findOneAndUpdate(
+      { storeId: new mongoose.Types.ObjectId(storeId) },
+      {
+        meliConnected: false,
+        meliAccessToken: '',
+        meliRefreshToken: '',
+        meliTokenExpiresAt: null,
+      }
+    );
 
     return res.status(200).json({ message: 'Cuenta de Mercado Libre desconectada correctamente' });
   } catch (err: any) {

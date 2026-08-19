@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
 import { Store } from '../models/Store';
+import { StoreConnections } from '../models/StoreConnections';
 import { AuthRequest } from '../middleware/auth';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'socialflow_secret_key_123456_change_me';
@@ -37,8 +38,11 @@ export const register = async (req: Request, res: Response) => {
       name: storeName,
       plan: 'Plan Pro',
     });
+    
+    // 2. Create connections
+    await StoreConnections.create({ storeId: store._id });
 
-    // 2. Hash password & create user
+    // 3. Hash password & create user
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await User.create({
       name,
@@ -48,7 +52,7 @@ export const register = async (req: Request, res: Response) => {
       role: 'admin',
     });
 
-    // 3. Sign JWT & set cookie
+    // 4. Sign JWT & set cookie
     const token = signToken(user._id.toString(), store._id.toString(), user.role);
     res.cookie('token', token, COOKIE_OPTIONS);
 
@@ -159,13 +163,13 @@ export const getConnections = async (req: AuthRequest, res: Response) => {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    const store = await Store.findById(storeId).select('metaConnected meliConnected shopifyConnected');
-    if (!store) return res.status(404).json({ error: 'Tienda no encontrada' });
+    const connections = await StoreConnections.findOne({ storeId: storeId }).select('metaConnected meliConnected shopifyConnected');
+    if (!connections) return res.status(404).json({ error: 'Conexiones no encontradas' });
 
     return res.status(200).json({
-      meta: store.metaConnected,
-      mercadolibre: store.meliConnected,
-      shopify: store.shopifyConnected
+      meta: connections.metaConnected,
+      mercadolibre: connections.meliConnected,
+      shopify: connections.shopifyConnected
     });
   } catch (error: any) {
     console.error('getConnections error:', error);

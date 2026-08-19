@@ -15,6 +15,13 @@ export interface IProduct extends Document {
   status: 'active' | 'inactive';
   createdAt: Date;
   updatedAt: Date;
+  vendor?: string;
+  productType?: string;
+  tags?: string[];
+  compareAtPrice?: number;
+  weight?: number;
+  weightUnit?: string;
+  barcode?: string;
 }
 
 const ProductSchema = new Schema<IProduct>(
@@ -31,6 +38,13 @@ const ProductSchema = new Schema<IProduct>(
     queriesCount: { type: Number, default: 0 },
     channels: [{ type: String, enum: ['instagram', 'facebook', 'mercadolibre', 'shopify', 'import'] }],
     status: { type: String, enum: ['active', 'inactive'], default: 'active', index: true },
+    vendor: { type: String, default: '' },
+    productType: { type: String, default: '' },
+    tags: [{ type: String }],
+    compareAtPrice: { type: Number },
+    weight: { type: Number },
+    weightUnit: { type: String, default: 'kg' },
+    barcode: { type: String, default: '' },
   },
   { timestamps: true }
 );

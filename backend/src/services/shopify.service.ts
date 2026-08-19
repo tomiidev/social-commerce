@@ -35,15 +35,54 @@ export class ShopifyService {
   static async createProduct(shopUrl: string, accessToken: string, product: any) {
     const client = this.getClient(shopUrl, accessToken);
     
+    let tagsString = undefined;
+    if (product.tags) {
+      tagsString = Array.isArray(product.tags) ? product.tags.join(', ') : product.tags;
+    }
+
+    // Generate variants based on combinations of sizes and colors
+    const variants: any[] = [];
+    const sizes = product.sizes && product.sizes.length > 0 ? product.sizes : ['Default'];
+    const colors = product.colors && product.colors.length > 0 ? product.colors : ['Default'];
+
+    for (const size of sizes) {
+      for (const color of colors) {
+        const variant: any = {
+          price: product.price,
+          inventory_quantity: Math.floor(product.stock / (sizes.length * colors.length)) || 1,
+          sku: `${product.sku}-${size}-${color}`,
+          option1: size,
+          option2: color,
+        };
+
+        if (product.compareAtPrice !== undefined && product.compareAtPrice !== null) {
+          variant.compare_at_price = product.compareAtPrice;
+        }
+        if (product.weight !== undefined && product.weight !== null) {
+          variant.weight = product.weight;
+        }
+        if (product.weightUnit) {
+          variant.weight_unit = product.weightUnit;
+        }
+        if (product.barcode) {
+          variant.barcode = product.barcode;
+        }
+        variants.push(variant);
+      }
+    }
+
     const shopifyProduct = {
       product: {
         title: product.name,
         body_html: product.description,
-        variants: [{
-          price: product.price,
-          inventory_quantity: product.stock,
-          sku: product.sku,
-        }],
+        vendor: product.vendor || undefined,
+        product_type: product.productType || undefined,
+        tags: tagsString,
+        options: [
+          { name: 'Size', values: sizes },
+          { name: 'Color', values: colors }
+        ],
+        variants: variants,
         status: product.status === 'active' ? 'active' : 'draft',
       }
     };

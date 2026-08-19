@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { Store } from '../models/Store';
+import { StoreConnections } from '../models/StoreConnections';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 
 const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY;
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET;
@@ -48,11 +49,15 @@ export const handleCallback = async (req: Request, res: Response) => {
       code,
     });
 
-    await Store.findByIdAndUpdate(payload.storeId, {
-      shopifyConnected: true,
-      shopifyShopUrl: shop,
-      shopifyAccessToken: tokenResponse.data.access_token,
-    });
+    await StoreConnections.findOneAndUpdate(
+      { storeId: new mongoose.Types.ObjectId(payload.storeId) },
+      {
+        shopifyConnected: true,
+        shopifyShopUrl: shop,
+        shopifyAccessToken: tokenResponse.data.access_token,
+      },
+      { upsert: true }
+    );
 
     return res.redirect(`${FRONTEND_URL}/settings?shopify=connected`);
   } catch (err: any) {
@@ -67,10 +72,10 @@ export const getShopifyStatus = async (req: AuthRequest, res: Response) => {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    const store = await Store.findById(storeId).select('shopifyConnected');
-    if (!store) return res.status(404).json({ error: 'Tienda no encontrada' });
+    const connections = await StoreConnections.findOne({ storeId: new mongoose.Types.ObjectId(storeId) }).select('shopifyConnected');
+    if (!connections) return res.status(404).json({ error: 'Conexiones no encontradas' });
 
-    return res.status(200).json({ connected: store.shopifyConnected });
+    return res.status(200).json({ connected: connections.shopifyConnected });
   } catch (err: any) {
     console.error('[Shopify] getShopifyStatus error:', err?.message);
     return res.status(500).json({ error: 'Error al obtener estado' });
@@ -82,11 +87,14 @@ export const disconnectShopify = async (req: AuthRequest, res: Response) => {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    await Store.findByIdAndUpdate(storeId, {
-      shopifyConnected: false,
-      shopifyShopUrl: '',
-      shopifyAccessToken: '',
-    });
+    await StoreConnections.findOneAndUpdate(
+      { storeId: new mongoose.Types.ObjectId(storeId) },
+      {
+        shopifyConnected: false,
+        shopifyShopUrl: '',
+        shopifyAccessToken: '',
+      }
+    );
 
     return res.status(200).json({ message: 'Conexión con Shopify eliminada' });
   } catch (err: any) {
