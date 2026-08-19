@@ -19,7 +19,14 @@ export const initiateAuth = async (req: AuthRequest, res: Response) => {
   if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
   const state = jwt.sign({ storeId }, JWT_SECRET, { expiresIn: '10m' });
-  const redirectUri = `${BACKEND_URL}/api/shopify/auth/callback`;
+  
+  // Ensure BACKEND_URL starts with https://
+  let baseUrl = BACKEND_URL;
+  if (!baseUrl.startsWith('http')) {
+    baseUrl = `https://${baseUrl}`;
+  }
+  
+  const redirectUri = `${baseUrl}/api/shopify/auth/callback`;
   
   const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${SHOPIFY_API_KEY}&scope=${SHOPIFY_SCOPES}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
 
