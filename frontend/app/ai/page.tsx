@@ -13,6 +13,7 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import AIResponseDisplay from '../../components/AIResponseDisplay';
+import AIChatSidebar from '../../components/AIChatSidebar';
 import { PREDEFINED_QUESTIONS } from '../../types/ai';
 
 interface ChatMessage {
@@ -34,25 +35,74 @@ const getIconForQuestion = (id: number) => {
 };
 
 export default function AIAssistantPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      sender: 'assistant',
-      text: '¡Hola! Soy tu **Asistente IA de SocialFlow**. Estoy acá para ayudarte a analizar tus datos de venta, catálogo de productos, clientes e interacciones sociales.\n\nPodés elegir una de las preguntas sugeridas de la derecha o hacerme cualquier consulta libre sobre tu negocio. ¿En qué te puedo ayudar hoy?',
-      createdAt: new Date().toISOString()
-    }
-  ]);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load messages when conversation changes
+  useEffect(() => {
+    const fetchConversation = async () => {
+      if (selectedConversationId) {
+        setLoading(true);
+        try {
+          const res = await api.get(`/ai/conversations/${selectedConversationId}`);
+          // Map backend message format to frontend ChatMessage format
+          const formattedMessages = res.data.messages.map((m: any) => ({
+            id: Math.random().toString(), // Or use a unique ID from the backend if available
+            sender: m.sender,
+            text: m.text,
+            createdAt: m.createdAt
+          }));
+          setMessages(formattedMessages);
+        } catch (err) {
+          console.error('Error fetching conversation:', err);
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setMessages([{
+          id: 'welcome',
+          sender: 'assistant',
+          text: '¡Hola! Selecciona una conversación o inicia una nueva para comenzar.',
+          createdAt: new Date().toISOString()
+        }]);
+      }
+    };
+    fetchConversation();
+  }, [selectedConversationId]);
 
   // Scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const handleCreateConversation = async () => {
+    try {
+      const res = await api.post('/ai/conversations');
+      setSelectedConversationId(res.data._id);
+      setMessages([]);
+    } catch (err) {
+      console.error('Error creating conversation:', err);
+    }
+  };
+
   const handleSendMessage = async (textToSend: string, queryType?: string) => {
     if (!textToSend.trim() || loading) return;
+
+    // Si no hay conversación seleccionada, crear una primero
+    let conversationId = selectedConversationId;
+    if (!conversationId) {
+      try {
+        const res = await api.post('/ai/conversations');
+        conversationId = res.data._id;
+        setSelectedConversationId(conversationId);
+      } catch (err) {
+        console.error('Error creating conversation:', err);
+        return;
+      }
+    }
 
     const userMessage: ChatMessage = {
       id: Math.random().toString(),
@@ -61,7 +111,8 @@ export default function AIAssistantPage() {
       createdAt: new Date().toISOString()
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    const newMessages = [...messages.filter(m => m.id !== 'welcome'), userMessage];
+    setMessages(newMessages);
     setInputText('');
     setLoading(true);
 
@@ -72,18 +123,20 @@ export default function AIAssistantPage() {
         // Predefined question flow
         const res = await api.post('/ai/predefined-question', {
           question: textToSend,
-          queryType
+          queryType,
+          conversationId
         });
         assistantReply = res.data.reply;
       } else {
         // Open chat flow
-        const history = messages
+        const history = newMessages
           .filter(m => m.id !== 'welcome')
           .map(m => ({ sender: m.sender, text: m.text }));
         
         const res = await api.post('/ai/chat', {
           question: textToSend,
-          history
+          history,
+          conversationId
         });
         assistantReply = res.data.reply;
       }
@@ -95,7 +148,14 @@ export default function AIAssistantPage() {
         createdAt: new Date().toISOString()
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
+      const updatedMessages = [...newMessages, assistantMessage];
+      setMessages(updatedMessages);
+
+      // Persist conversation
+      await api.put(`/ai/conversations/${conversationId}`, {
+        messages: updatedMessages.map(m => ({ sender: m.sender, text: m.text }))
+      });
+
     } catch (err) {
       console.error('Error talking to AI Assistant:', err);
       const errorMessage: ChatMessage = {
@@ -112,6 +172,11 @@ export default function AIAssistantPage() {
 
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-slate-50 w-full">
+      <AIChatSidebar 
+        onSelectConversation={setSelectedConversationId} 
+        selectedId={selectedConversationId}
+        onNewConversation={handleCreateConversation}
+      />
       {/* MAIN CHAT AREA */}
       <div className="flex-1 flex flex-col h-full bg-slate-50 min-w-0">
         <div className="p-4 border-b border-slate-100 bg-white z-10">
@@ -178,8 +243,8 @@ export default function AIAssistantPage() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Suggested Questions Slider (Visible on small screens) */}
-        <div className="lg:hidden w-full border-t border-slate-100 bg-white min-w-0">
+        {/* Suggested Questions Slider */}
+        <div className="w-full border-t border-slate-100 bg-white min-w-0">
           <div className="flex overflow-x-auto p-4 gap-2 scrollbar-hide w-full">
             {PREDEFINED_QUESTIONS.map((q) => (
               <button
@@ -220,35 +285,6 @@ export default function AIAssistantPage() {
           </form>
         </div>
       </div>
-
-      {/* SUGGESTED PANEL SIDEBAR (Visible only on Large screens) */}
-      <aside className="hidden lg:flex w-80 flex-col bg-white border-l border-slate-100 h-full p-5 space-y-6 shrink-0">
-        <div>
-          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider text-slate-400 mb-2">Sugerencias</h4>
-          <p className="text-[10px] text-slate-400 leading-relaxed">Selecciona una de las preguntas sugeridas para iniciar un análisis automático.</p>
-        </div>
-
-        <div className="space-y-3">
-          {PREDEFINED_QUESTIONS.map((q) => {
-            const Icon = getIconForQuestion(q.id);
-            return (
-              <button
-                key={q.id}
-                onClick={() => handleSendMessage(q.question, q.queryType)}
-                disabled={loading}
-                className="w-full text-left p-3.5 bg-slate-50 hover:bg-indigo-50 border border-slate-100 hover:border-indigo-100 rounded-2xl flex items-center space-x-3 group transition-all duration-200 disabled:opacity-50"
-              >
-                <div className="p-2 rounded-xl bg-white border border-slate-100 text-slate-500 group-hover:text-indigo-600 group-hover:border-indigo-100 transition-colors shadow-sm shrink-0">
-                  <Icon className="h-4.5 w-4.5" />
-                </div>
-                <div className="flex-1 flex justify-between items-center text-xs">
-                  <span className="font-semibold text-slate-700 group-hover:text-slate-900 transition-colors">{q.question}</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </aside>
     </div>
   );
 }

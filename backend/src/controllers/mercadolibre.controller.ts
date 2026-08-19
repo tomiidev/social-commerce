@@ -12,6 +12,9 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { Store } from '../models/Store';
+import { MeliQuestion } from '../models/MeliQuestion';
+import { Product } from '../models/Product';
+import { Event } from '../models/Event';
 import { getOAuthUrl, exchangeCodeForToken } from '../services/mercadolibre.service';
 import { MeliProvider } from '../services/MeliProvider';
 import jwt from 'jsonwebtoken';
@@ -37,6 +40,34 @@ export const getProductQuestions = async (req: AuthRequest, res: Response) => {
 
     const meliProvider = new MeliProvider(store.meliAccessToken);
     const questions = await meliProvider.getQuestions(itemId);
+
+    // Save/Update questions in database and update product queries count
+    for (const q of questions) {
+      const existing = await MeliQuestion.findOne({ questionId: q.id });
+      if (!existing) {
+        await MeliQuestion.create({
+          storeId,
+          itemId,
+          text: q.text,
+          status: q.status,
+          createdAt: q.date_created,
+        });
+
+        // Increment product queries count
+        await Product.findOneAndUpdate(
+          { storeId, sku: itemId }, // Assuming itemId is used as SKU or identifiable
+          { $inc: { queriesCount: 1 } }
+        );
+
+        // Record event
+        await Event.create({
+          storeId,
+          type: 'question',
+          text: `Nueva consulta en Mercado Libre: "${q.text.substring(0, 30)}..."`,
+          channel: 'mercadolibre',
+        });
+      }
+    }
 
     return res.status(200).json(questions);
   } catch (err: any) {

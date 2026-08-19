@@ -14,4 +14,4 @@ export default function AIResponseDisplay({ text }: AIResponseDisplayProps) {
       </ReactMarkdown>
     </div>
   );
-}
+} 

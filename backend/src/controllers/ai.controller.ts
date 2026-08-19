@@ -6,8 +6,96 @@ import { Product } from '../models/Product';
 import { Sale } from '../models/Sale';
 import { Customer } from '../models/Customer';
 import { Store } from '../models/Store';
+import { AIConversation } from '../models/AIConversation';
+import { Event } from '../models/Event';
 import { GeminiService } from '../services/gemini.service';
 import mongoose from 'mongoose';
+
+export const getAIConversations = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    const conversations = await AIConversation.find({ storeId: new mongoose.Types.ObjectId(storeId) })
+      .sort({ lastMessageAt: -1 });
+
+    return res.status(200).json(conversations);
+  } catch (error: any) {
+    console.error('Error fetching AI conversations:', error);
+    return res.status(500).json({ error: 'Error al obtener conversaciones' });
+  }
+};
+
+export const createAIConversation = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    const conversation = await AIConversation.create({
+      storeId: new mongoose.Types.ObjectId(storeId),
+      title: 'Nueva Conversación',
+      messages: [],
+      lastMessageAt: new Date(),
+    });
+
+    await Event.create({
+      storeId: new mongoose.Types.ObjectId(storeId),
+      type: 'conversation',
+      text: 'Se inició una nueva conversación con el asistente IA',
+      channel: 'system',
+      referenceId: conversation._id,
+    });
+
+    return res.status(201).json(conversation);
+  } catch (error: any) {
+    console.error('Error creating AI conversation:', error);
+    return res.status(500).json({ error: 'Error al crear conversación' });
+  }
+};
+
+export const updateAIConversation = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    const { id } = req.params;
+    const { messages } = req.body;
+
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    const conversation = await AIConversation.findOneAndUpdate(
+      { _id: id, storeId: new mongoose.Types.ObjectId(storeId) },
+      { 
+        $set: { 
+          messages,
+          lastMessageAt: new Date()
+        } 
+      },
+      { new: true }
+    );
+
+    if (!conversation) return res.status(404).json({ error: 'Conversación no encontrada' });
+
+    return res.status(200).json(conversation);
+  } catch (error: any) {
+    console.error('Error updating AI conversation:', error);
+    return res.status(500).json({ error: 'Error al actualizar conversación' });
+  }
+};
+
+export const getAIConversationById = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    const { id } = req.params;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    const conversation = await AIConversation.findOne({ _id: id, storeId: new mongoose.Types.ObjectId(storeId) });
+    if (!conversation) return res.status(404).json({ error: 'Conversación no encontrada' });
+
+    return res.status(200).json(conversation);
+  } catch (error: any) {
+    console.error('Error fetching AI conversation:', error);
+    return res.status(500).json({ error: 'Error al obtener conversación' });
+  }
+};
 
 export const suggestResponse = async (req: AuthRequest, res: Response) => {
   try {
@@ -71,10 +159,29 @@ export const suggestResponse = async (req: AuthRequest, res: Response) => {
 export const chatAssistant = async (req: AuthRequest, res: Response) => {
   try {
     const storeId = req.user?.storeId;
-    const { question, history } = req.body;
+    const { question, history, conversationId } = req.body;
 
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
     if (!question) return res.status(400).json({ error: 'Se requiere una pregunta para el asistente' });
+
+    // Update conversation title if it's the first turn
+    console.log('Checking for title update:', { conversationId, historyLength: history?.length });
+    if (conversationId && (!history || history.length === 0)) {
+        const conversation = await AIConversation.findById(conversationId);
+        console.log('Conversation found:', !!conversation, 'Title:', conversation?.title);
+        if (conversation && conversation.title === 'Nueva Conversación') {
+            const newTitle = await GeminiService.generateConversationTitle(storeId, question);
+            console.log('New title generated:', newTitle);
+            await AIConversation.findByIdAndUpdate(conversationId, { title: newTitle });
+            console.log('Title updated successfully');
+
+            // Update associated event text
+            await Event.findOneAndUpdate(
+                { referenceId: conversationId },
+                { text: `Conversación iniciada: ${newTitle}` }
+            );
+        }
+    }
 
     const store = await Store.findById(storeId);
     const storeName = store?.name || 'Mi Tienda';
@@ -87,7 +194,7 @@ export const chatAssistant = async (req: AuthRequest, res: Response) => {
       .populate('customerId', 'name')
       .populate('productId', 'name')
       .sort({ date: -1 })
-      .limit(5);
+      .limit(4);
     const customersCount = await Customer.countDocuments({ storeId: storeObjectId });
     const topCustomers = await Customer.find({ storeId: storeObjectId }).sort({ purchasesCount: -1 }).limit(3).select('name purchasesCount city');
 
@@ -138,9 +245,24 @@ export const chatAssistant = async (req: AuthRequest, res: Response) => {
 export const handlePredefinedQuestion = async (req: AuthRequest, res: Response) => {
   try {
     const storeId = req.user?.storeId;
-    const { question, queryType } = req.body;
+    const { question, queryType, conversationId } = req.body;
 
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    // Update conversation title if it's the first turn
+    if (conversationId) {
+        const conversation = await AIConversation.findById(conversationId);
+        if (conversation && conversation.title === 'Nueva Conversación') {
+            const newTitle = await GeminiService.generateConversationTitle(storeId, question);
+            await AIConversation.findByIdAndUpdate(conversationId, { title: newTitle });
+
+            // Update associated event text
+            await Event.findOneAndUpdate(
+                { referenceId: conversationId },
+                { text: `Conversación iniciada: ${newTitle}` }
+            );
+        }
+    }
 
     // 1. Obtener datos de la BD necesarios para responder
     const storeObjectId = new mongoose.Types.ObjectId(storeId);

@@ -9,6 +9,8 @@ export interface IAIMessage {
 export interface IAIConversation extends Document {
   storeId: Schema.Types.ObjectId;
   messages: IAIMessage[];
+  title: string;
+  lastMessageAt: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +25,8 @@ const AIConversationSchema = new Schema<IAIConversation>(
   {
     storeId: { type: Schema.Types.ObjectId, ref: 'Store', required: true, index: true },
     messages: [AIMessageSchema],
+    title: { type: String, default: 'Nueva Conversación' },
+    lastMessageAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

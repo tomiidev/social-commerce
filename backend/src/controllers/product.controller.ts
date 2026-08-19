@@ -4,6 +4,7 @@ import { Product } from '../models/Product';
 import { Store } from '../models/Store';
 import { InstagramProvider, FacebookProvider } from '../services/SocialProvider';
 import { MeliProvider } from '../services/MeliProvider';
+import { ShopifyService } from '../services/shopify.service';
 import { S3_BUCKET_NAME, S3_REGION } from '../config/s3';
 import mongoose from 'mongoose';
 
@@ -75,6 +76,22 @@ export const getProductById = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error fetching product:', error);
     return res.status(500).json({ error: 'Error al obtener producto' });
+  }
+};
+
+export const getMostConsultedProducts = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    const products = await Product.find({ storeId: new mongoose.Types.ObjectId(storeId) })
+      .sort({ queriesCount: -1 })
+      .limit(5);
+
+    return res.status(200).json(products);
+  } catch (error: any) {
+    console.error('Error fetching most consulted products:', error);
+    return res.status(500).json({ error: 'Error al obtener productos más consultados' });
   }
 };
 
@@ -197,7 +214,7 @@ export const deleteProduct = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * Imports product catalogues from Social Providers (Meta/MercadoLibre)
+ * Imports product catalogues from Social Providers (Meta/MercadoLibre/Shopify)
  */
 export const importProducts = async (req: AuthRequest, res: Response) => {
   try {
@@ -216,8 +233,9 @@ export const importProducts = async (req: AuthRequest, res: Response) => {
     const igSynced = await igProvider.syncProducts(storeId);
     const fbSynced = await fbProvider.syncProducts(storeId);
     const meliSynced = await meliProvider.syncProducts(storeId);
-    console.log(meliSynced)
-    const allSynced = [...igSynced, ...fbSynced, ...meliSynced];
+    const shopifySynced = await ShopifyService.syncProducts(storeId, store?.shopifyShopUrl, store?.shopifyAccessToken);
+    
+    const allSynced = [...igSynced, ...fbSynced, ...meliSynced, ...shopifySynced];
     const importedProducts = [];
 
     for (const item of allSynced) {
@@ -244,19 +262,22 @@ export const importProducts = async (req: AuthRequest, res: Response) => {
         });
         importedProducts.push(created);
       } else {
-        // Just update stock
+        // Just update stock/info
         existing.name = item.name || existing.name;
         existing.description = item.description || existing.description;
         existing.price = item.price || existing.price;
         existing.stock = item.stock ?? existing.stock;
         existing.status = item.status || existing.status;
+        // Ensure channels include the new channel
+        const newChannels = Array.from(new Set([...existing.channels, ...item.channels]));
+        existing.channels = newChannels as any;
         await existing.save();
         importedProducts.push(existing);
       }
     }
 
     return res.status(200).json({
-      message: `Sincronización completada. Se importaron/actualizaron ${importedProducts.length} productos desde Meta y Mercado Libre.`,
+      message: `Sincronización completada. Se importaron/actualizaron ${importedProducts.length} productos desde Meta, Mercado Libre y Shopify.`,
       products: importedProducts
     });
   } catch (error: any) {

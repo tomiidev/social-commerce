@@ -15,6 +15,7 @@ import {
   disconnectMeta,
   connectSimulated,
   syncPosts,
+  syncProducts,
 } from '../controllers/meta.controller';
 import { protect } from '../middleware/auth';
 
@@ -32,5 +33,6 @@ router.get('/status', getMetaStatus);           // Current connection status for
 router.post('/disconnect', disconnectMeta);     // Remove Meta credentials
 router.post('/connect-simulated', connectSimulated); // Simulated fallback connection for development
 router.post('/sync/posts', syncPosts);          // Trigger post synchronization
+router.post('/sync/products', syncProducts);    // Trigger product synchronization
 
 export default router;

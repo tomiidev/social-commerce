@@ -20,6 +20,7 @@
 
 import { IProduct } from '../models/Product';
 import { IPost } from '../models/Post';
+import { GeminiService } from './gemini.service';
 import {
   IMetaCredentials,
   sendInstagramMessage,
@@ -78,11 +79,10 @@ export class InstagramProvider extends SocialProvider {
     super(credentials);
   }
 
-  async syncProducts(_storeId: string): Promise<Partial<IProduct>[]> {
-    // Instagram does not expose a direct product catalogue API in the
-    // Business Messaging scope; products are managed via the Commerce Manager.
-    // For now this always returns demo data as a placeholder.
-    return [
+  async syncProducts(storeId: string): Promise<Partial<IProduct>[]> {
+    // ── FALLBACK ──────────────────────────────────────────────────────────
+    console.log('[InstagramProvider] syncProducts → using simulated data');
+    const rawData = [
       {
         name: 'Remera Básica Instagram',
         description: 'Remera de algodón peinado importada',
@@ -91,11 +91,15 @@ export class InstagramProvider extends SocialProvider {
         sku: 'REM-BAS-IG',
         sizes: ['S', 'M', 'L'],
         colors: ['Blanco', 'Negro'],
-        image: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?q=80&w=300',
-        channels: ['instagram'],
-        status: 'active',
       },
     ];
+    
+    // Map via Gemini
+    const processedProducts = await Promise.all(
+        rawData.map(p => GeminiService.parseProductData(storeId, p))
+    );
+    
+    return processedProducts.map(p => ({ ...p, channels: ['instagram'] }));
   }
 
   async syncPosts(_storeId: string): Promise<Partial<IPost>[]> {
@@ -180,9 +184,10 @@ export class FacebookProvider extends SocialProvider {
     super(credentials);
   }
 
-  async syncProducts(_storeId: string): Promise<Partial<IProduct>[]> {
+  async syncProducts(storeId: string): Promise<Partial<IProduct>[]> {
     // Facebook Catalogue sync via Commerce Manager API is outside current scope.
-    return [
+    // Fallback: simple mapping via Gemini
+    const rawData = [
       {
         name: 'Campera Bomber Facebook',
         description: 'Campera de abrigo tipo bomber clásica',
@@ -191,11 +196,15 @@ export class FacebookProvider extends SocialProvider {
         sku: 'CAM-BOM-FB',
         sizes: ['M', 'L', 'XL'],
         colors: ['Verde Oliva', 'Negro'],
-        image: 'https://images.unsplash.com/photo-1551028719-00167b16eac5?q=80&w=300',
-        channels: ['facebook'],
-        status: 'active',
       },
     ];
+    
+    // Map via Gemini
+    const processedProducts = await Promise.all(
+        rawData.map(p => GeminiService.parseProductData(storeId, p))
+    );
+    
+    return processedProducts.map(p => ({ ...p, channels: ['facebook'] }));
   }
 
   async syncPosts(_storeId: string): Promise<Partial<IPost>[]> {

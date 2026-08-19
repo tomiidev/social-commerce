@@ -19,6 +19,7 @@ import { Conversation } from '../models/Conversation';
 import { Message } from '../models/Message';
 import { Sale } from '../models/Sale';
 import { AIUsage } from '../models/AIUsage';
+import { AIConversation } from '../models/AIConversation';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/socialflow';
 
@@ -39,6 +40,7 @@ async function seed() {
     await Message.deleteMany({});
     await Sale.deleteMany({});
     await AIUsage.deleteMany({});
+    await AIConversation.deleteMany({});
     console.log('Database cleared.');
 
     // 1. Create Store
@@ -649,6 +651,30 @@ async function seed() {
     ];
     await AIUsage.create(aiUsageData);
     console.log('Seeding AI Usage completed.');
+
+    // 9. Create AI Conversations
+    console.log('Seeding AI Conversations...');
+    await AIConversation.create([
+      {
+        storeId: store._id,
+        title: 'Consulta sobre camperas',
+        messages: [
+            { sender: 'user', text: '¿Qué camperas tenés en stock?' },
+            { sender: 'assistant', text: 'Tengo la Campera Nike disponible en talles S, M, L.' }
+        ],
+        lastMessageAt: new Date(Date.now() - 1000 * 60 * 60 * 2)
+      },
+      {
+        storeId: store._id,
+        title: 'Análisis de ventas',
+        messages: [
+            { sender: 'user', text: '¿Cuáles fueron mis ventas más altas?' },
+            { sender: 'assistant', text: 'Tus productos más vendidos son las Zapatillas Adidas.' }
+        ],
+        lastMessageAt: new Date(Date.now() - 1000 * 60 * 60 * 1)
+      }
+    ]);
+    console.log('Seeding AI Conversations completed.');
 
     console.log('------------------------------------------------');
     console.log('DATABASE SEEDING COMPLETED SUCCESSFULLY!');

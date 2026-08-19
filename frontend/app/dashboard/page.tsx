@@ -13,7 +13,7 @@ import {
   ShoppingBag as BagIcon,
   Tag
 } from 'lucide-react';
-import { InstagramIcon, FacebookIcon } from '../../components/SocialIcons';
+import { InstagramIcon, FacebookIcon, MeliIcon } from '../../components/SocialIcons';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -26,6 +26,7 @@ import {
   Cell,
   Legend
 } from 'recharts';
+import { useRouter } from 'next/navigation';
 
 interface KPI {
   queries: number;
@@ -51,9 +52,10 @@ export default function DashboardPage() {
   const [range, setRange] = useState<'7' | '30' | '90'>('7');
   const [kpis, setKpis] = useState<KPI | null>(null);
   const [charts, setCharts] = useState<ChartData | null>(null);
+  const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
-
+  const router = useRouter()
   useEffect(() => {
     const timer = setTimeout(() => setIsMounted(true), 0);
     return () => clearTimeout(timer);
@@ -62,9 +64,14 @@ export default function DashboardPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response = await api.get(`/analytics?days=${range}`);
-      setKpis(response.data.kpis);
-      setCharts(response.data.charts);
+      const [analyticsRes, topProductsRes, eventsRes] = await Promise.all([
+        api.get(`/analytics?days=${range}`),
+        api.get(`/products/most-consulted`),
+        api.get(`/events`)
+      ]);
+      setKpis(analyticsRes.data.kpis);
+      setCharts({ ...analyticsRes.data.charts, topProducts: topProductsRes.data });
+      setEvents(eventsRes.data);
     } catch (error) {
       console.error('Error fetching dashboard analytics:', error);
     } finally {
@@ -80,6 +87,49 @@ export default function DashboardPage() {
   }, [range]);
 
   const COLORS = ['#6366f1', '#3b82f6']; // Indigo and Blue
+
+  const getTimeAgo = (date: string) => {
+    const seconds = Math.floor((new Date().getTime() - new Date(date).getTime()) / 1000);
+    if (seconds < 60) return 'Hace un momento';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `Hace ${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `Hace ${hours} h`;
+    return 'Hace un tiempo';
+  };
+
+  const getEventActivity = (event: any) => {
+    let icon: React.FC<{ className?: string }> = MessageSquare;
+    let iconColor = 'text-slate-500 bg-slate-50';
+    let link: string | undefined;
+
+    if (event.channel === 'instagram') {
+      icon = InstagramIcon;
+      iconColor = 'text-pink-500 bg-pink-50';
+    } else if (event.channel === 'facebook') {
+      icon = FacebookIcon;
+      iconColor = 'text-blue-600 bg-blue-50';
+    } else if (event.channel === 'mercadolibre') {
+      icon = MeliIcon;
+      iconColor = 'text-amber-500 bg-amber-50';
+    } else if (event.type === 'sale') {
+      icon = BagIcon;
+      iconColor = 'text-emerald-500 bg-emerald-50';
+    } else if (event.type === 'conversation') {
+      icon = MessageSquare;
+      iconColor = 'text-indigo-500 bg-indigo-50';
+      link = '/ai'; // Redirección al chat IA
+    }
+
+    return {
+      id: event._id,
+      text: event.text,
+      time: getTimeAgo(event.createdAt),
+      icon,
+      iconColor,
+      link,
+    };
+  };
 
   if (loading && !kpis) {
     return (
@@ -105,46 +155,6 @@ export default function DashboardPage() {
       </div>
     );
   }
-
-  // Activity feed (seeded simulated data matching visual reference)
-  const activities = [
-    {
-      id: 1,
-      type: 'query',
-      text: 'Nueva consulta en Campera Nike',
-      time: 'Hace 2 min',
-      channel: 'instagram',
-      icon: InstagramIcon,
-      iconColor: 'text-pink-500 bg-pink-50',
-    },
-    {
-      id: 2,
-      type: 'message',
-      text: 'María preguntó por Zapatillas Adidas',
-      time: 'Hace 5 min',
-      channel: 'instagram',
-      icon: InstagramIcon,
-      iconColor: 'text-pink-500 bg-pink-50',
-    },
-    {
-      id: 3,
-      type: 'conv',
-      text: 'Juan inició una conversación',
-      time: 'Hace 10 min',
-      channel: 'facebook',
-      icon: FacebookIcon,
-      iconColor: 'text-blue-600 bg-blue-50',
-    },
-    {
-      id: 4,
-      type: 'sale',
-      text: 'Venta realizada: Campera Nike',
-      time: 'Hace 1 hora',
-      channel: 'instagram',
-      icon: BagIcon,
-      iconColor: 'text-emerald-500 bg-emerald-50',
-    },
-  ];
 
   return (
     <div className="p-6 space-y-6">
@@ -395,26 +405,34 @@ export default function DashboardPage() {
             <p className="text-[10px] text-slate-400">Eventos de red social y ventas en tiempo real</p>
           </div>
           <div className="space-y-3.5">
-            {activities.map((act) => {
-              const Icon = act.icon;
-              return (
-                <div
-                  key={act.id}
-                  className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 transition-colors group cursor-pointer border border-transparent hover:border-slate-100/50"
-                >
-                  <div className="flex items-center space-x-3.5">
-                    <div className={`p-2 rounded-xl ${act.iconColor}`}>
-                      <Icon className="h-4.5 w-4.5" />
+            {events.length > 0 ? (
+              events.map((event) => {
+                const act = getEventActivity(event);
+                const Icon = act.icon;
+                return (
+                  <div
+                    key={act.id}
+                    onClick={() => act.link && router.push(act.link)}
+                    className={`flex items-center justify-between p-2.5 rounded-xl transition-colors group border border-transparent hover:border-slate-100/50 ${act.link ? 'cursor-pointer hover:bg-slate-50' : ''}`}
+                  >
+                    <div className="flex items-center space-x-3.5">
+                      <div className={`p-2 rounded-xl ${act.iconColor}`}>
+                        <Icon className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-semibold text-slate-700">{act.text}</span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">{act.time}</span>
+                      </div>
                     </div>
-                    <div className="flex flex-col">
-                      <span className="text-xs font-semibold text-slate-700">{act.text}</span>
-                      <span className="text-[10px] text-slate-400 mt-0.5">{act.time}</span>
-                    </div>
+                    <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 group-hover:translate-x-0.5 transition-all" />
                   </div>
-                  <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 group-hover:translate-x-0.5 transition-all" />
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="text-center py-6 text-xs text-slate-400">
+                No hay actividad reciente para mostrar.
+              </div>
+            )}
           </div>
         </div>
       </div>

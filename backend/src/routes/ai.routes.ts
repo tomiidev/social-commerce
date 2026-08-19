@@ -1,11 +1,25 @@
 import { Router } from 'express';
-import { suggestResponse, chatAssistant, handlePredefinedQuestion } from '../controllers/ai.controller';
+import { 
+    suggestResponse, 
+    chatAssistant, 
+    handlePredefinedQuestion,
+    getAIConversations,
+    createAIConversation,
+    updateAIConversation, 
+    getAIConversationById
+} from '../controllers/ai.controller';
 import { protect } from '../middleware/auth';
 import { Store } from '../models/Store';
 
 const router = Router();
 
 router.use(protect);
+
+// AI Conversation Management
+router.get('/conversations', getAIConversations);
+router.get('/conversations/:id', getAIConversationById);
+router.post('/conversations', createAIConversation);
+router.put('/conversations/:id', updateAIConversation);
 
 router.post('/suggest-response', suggestResponse);
 router.post('/chat', chatAssistant);

@@ -51,7 +51,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
     { name: 'Inicio', href: '/dashboard', icon: Home },
     { name: 'Inbox', href: '/inbox', icon: Inbox, countKey: 'conversations' },
     { name: 'Productos', href: '/products', icon: ShoppingBag },
-    { name: 'Publicaciones', href: '/posts', icon: Share2 },
+/*     { name: 'Publicaciones', href: '/posts', icon: Share2 }, */
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Clientes', href: '/customers', icon: Users },
     { name: 'Ventas', href: '/sales', icon: DollarSign },

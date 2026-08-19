@@ -53,6 +53,92 @@ export class GeminiService {
   }
 
   /**
+   * Parses raw product data (e.g. from Meta) and maps it to the Product model structure
+   */
+  static async parseProductData(
+    storeId: string,
+    rawData: any
+  ): Promise<any> {
+    const modelName = 'gemini-3.1-flash-lite';
+    const client = this.getClient();
+
+    const systemPrompt = `Sos un experto en catalogación de productos para e-commerce.
+Tu tarea es analizar la siguiente información cruda de un producto (posiblemente de una red social) y convertirla al siguiente formato JSON estricto:
+
+{
+  "name": string,
+  "description": string,
+  "price": number,
+  "stock": number,
+  "sku": string,
+  "sizes": string[],
+  "colors": string[],
+  "status": "active" | "inactive"
+}
+
+Si falta información (como precio, stock, etc.), intenta inferirla o asigna valores por defecto razonables (precio 0, stock 0, sku generado a partir del nombre).
+Devuelve SOLO el JSON, sin formato markdown ni introducciones.
+
+Datos crudos: ${JSON.stringify(rawData)}`;
+
+    if (!client || !(await this.checkQuotas(storeId))) {
+      // Fallback: simple mapping
+      return {
+        name: rawData.name || 'Producto Desconocido',
+        description: rawData.description || '',
+        price: Number(rawData.price) || 0,
+        stock: Number(rawData.stock) || 0,
+        sku: rawData.sku || 'SKU-GEN',
+        sizes: rawData.sizes || [],
+        colors: rawData.colors || [],
+        status: 'active'
+      };
+    }
+
+    try {
+      const model = client.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(systemPrompt);
+      const response = await result.response;
+      return JSON.parse(response.text().trim());
+    } catch (error) {
+      console.error('Error parsing product data with Gemini:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Gemini Parsing Error: ${errorMessage}`);
+    }
+  } 
+
+  /**
+   * Generates a short title for a conversation based on the first message
+   */
+  static async generateConversationTitle(
+    storeId: string,
+    message: string
+  ): Promise<string> {
+    const modelName = 'gemini-3.1-flash-lite';
+    const client = this.getClient();
+
+    const systemPrompt = `Tu tarea es generar un título breve (máximo 5 palabras) para una conversación con un asistente IA basado en el mensaje inicial del usuario.
+El objetivo es que sea descriptivo para que el usuario pueda identificar la conversación después.
+Responde únicamente con el título, sin comillas, sin introducciones.
+
+Mensaje del usuario: "${message}"`;
+
+    if (!client || !(await this.checkQuotas(storeId))) {
+      return 'Nueva Conversación';
+    }
+
+    try {
+      const model = client.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(systemPrompt);
+      const response = await result.response;
+      return response.text().trim().replace(/^["']|["']$/g, ''); // Clean quotes if any
+    } catch (error) {
+      console.error('Error generating conversation title:', error);
+      return 'Nueva Conversación';
+    }
+  }
+
+  /**
    * Generates a suggested reply for a client conversation
    */
   static async suggestResponse(
@@ -134,7 +220,8 @@ Genera solo el texto de la respuesta sugerida. Sin introducciones como "Aquí ti
       return response.text().trim();
     } catch (error: any) {
       console.error('Error generating suggested response with Gemini:', error);
-      throw new Error(`Gemini Error: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Gemini Error: ${errorMessage}`);
     }
   }
 
@@ -212,7 +299,8 @@ Evita comentarios técnicos sobre la estructura interna de MongoDB.`;
       return response.text().trim();
     } catch (error: any) {
       console.error('Error in Gemini Assistant chat:', error);
-      throw new Error(`Gemini Assistant Error: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Gemini Assistant Error: ${errorMessage}`);
     }
   }
 
@@ -263,7 +351,8 @@ Si los datos están vacíos o no hay información, indica amablemente que no hay
       return response.text().trim();
     } catch (error: any) {
       console.error('Error formatting response with Gemini:', error);
-      return `Hubo un error al procesar tu consulta: ${error.message}`;
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return `Hubo un error al procesar tu consulta: ${errorMessage}`;
     }
   }
 }

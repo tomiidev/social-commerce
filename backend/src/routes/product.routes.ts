@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getProducts, getProductById, createProduct, updateProduct, deleteProduct, importProducts, uploadProductImage, bulkCreateProducts } from '../controllers/product.controller';
+import { getProducts, getMostConsultedProducts, getProductById, createProduct, updateProduct, deleteProduct, importProducts, uploadProductImage, bulkCreateProducts } from '../controllers/product.controller';
 import { protect } from '../middleware/auth';
 import { uploadProductImage as uploadMiddleware } from '../middleware/upload';
 
@@ -8,6 +8,7 @@ const router = Router();
 router.use(protect);
 
 router.get('/', getProducts);
+router.get('/most-consulted', getMostConsultedProducts);
 router.post('/import', importProducts);
 router.post('/bulk', bulkCreateProducts);
 // Upload image to S3 — must be declared before /:id routes to avoid param conflicts

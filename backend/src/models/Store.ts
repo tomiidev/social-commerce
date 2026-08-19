@@ -15,6 +15,10 @@ export interface IStore extends Document {
   meliAccessToken?: string;
   meliRefreshToken?: string;
   meliTokenExpiresAt?: Date;
+  // Shopify credentials
+  shopifyConnected: boolean;
+  shopifyShopUrl?: string;
+  shopifyAccessToken?: string;
   // AI Token Usage
   aiTokensUsed: number;
   aiTokenLimit: number;
@@ -38,6 +42,10 @@ const StoreSchema = new Schema<IStore>(
     meliAccessToken: { type: String, default: '' },
     meliRefreshToken: { type: String, default: '' },
     meliTokenExpiresAt: { type: Date },
+    // Shopify credentials
+    shopifyConnected: { type: Boolean, default: false },
+    shopifyShopUrl: { type: String, default: '' },
+    shopifyAccessToken: { type: String, default: '' },
     // AI Token Usage
     aiTokensUsed: { type: Number, default: 0 },
     aiTokenLimit: { type: Number, default: 500000 },

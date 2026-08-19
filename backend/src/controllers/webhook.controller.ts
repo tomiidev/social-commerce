@@ -22,6 +22,7 @@ import { Store } from '../models/Store';
 import { Customer } from '../models/Customer';
 import { Conversation } from '../models/Conversation';
 import { Message } from '../models/Message';
+import { Event } from '../models/Event';
 import { verifyWebhookSignature } from '../services/meta.service';
 
 // ---------------------------------------------------------------------------
@@ -165,6 +166,14 @@ export const handleWebhook = async (req: Request, res: Response) => {
           sender: 'customer',
           text: messageText,
           aiSuggested: false,
+        });
+
+        // Record event
+        await Event.create({
+          storeId,
+          type: 'question',
+          text: `Nuevo mensaje en ${channel}: "${messageText.substring(0, 30)}..."`,
+          channel: channel,
         });
 
         console.log(

@@ -444,6 +444,7 @@ export default function SettingsPage() {
                         {loadingMeli ? 'Cargando...' : meliConnected ? 'Desconectar' : 'Conectar'}
                     </button>
                 </div>
+                <ShopifyConnectionCard />
             </div>
           </div>
 
@@ -506,6 +507,56 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ShopifyConnectionCard() {
+  const [connected, setConnected] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [shopUrl, setShopUrl] = useState('');
+
+  useEffect(() => {
+    api.get('/shopify/status').then(res => setConnected(res.data.connected));
+  }, []);
+
+  const handleConnect = async () => {
+    if (!shopUrl) return alert('Por favor ingresa la URL de la tienda (ej. tienda.myshopify.com)');
+    setLoading(true);
+    try {
+      const res = await api.get(`/shopify/auth/url?shop=${shopUrl}`);
+      window.location.href = res.data.url;
+    } catch (err) {
+      alert('Error al iniciar la conexión');
+      setLoading(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    setLoading(true);
+    try {
+      await api.post('/shopify/disconnect');
+      setConnected(false);
+      setShopUrl('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="mt-6 pt-6 border-t border-slate-100">
+      <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider text-slate-400 mb-4">Canales Vinculados (Shopify)</h3>
+      {connected ? (
+        <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-100 rounded-2xl">
+          <span className="text-xs font-bold text-emerald-600">¡Tienda Shopify conectada!</span>
+          <button onClick={handleDisconnect} className="text-rose-500 font-semibold text-xs">Desconectar</button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <input placeholder="shop.myshopify.com" value={shopUrl} onChange={e => setShopUrl(e.target.value)} className="w-full border p-2 rounded text-xs" />
+          <button onClick={handleConnect} disabled={loading} className="w-full bg-indigo-600 text-white p-2 rounded text-xs font-semibold">Conectar Shopify</button>
         </div>
       )}
     </div>
