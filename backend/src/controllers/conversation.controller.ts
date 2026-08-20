@@ -6,7 +6,7 @@ import { Customer } from '../models/Customer';
 import { Store } from '../models/Store';
 import { createProvider, IMetaCredentials } from '../services/SocialProvider';
 import mongoose from 'mongoose';
-
+import { StoreConnections } from '../models/StoreConnections';
 export const getConversations = async (req: AuthRequest, res: Response) => {
   try {
     const storeId = req.user?.storeId;
@@ -108,26 +108,29 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     conversation.lastMessageText = text;
     conversation.lastMessageTime = new Date();
     conversation.unread = false;
-    await conversation.save();
 
+    // ... existing imports ...
+
+    // ... (in sendMessage function)
     // Resolve the customer's Meta external ID (IGSID / PSID)
     const customer = await Customer.findById(conversation.customerId);
     const recipientExternalId = customer?.externalId || undefined;
 
-    // Resolve Meta credentials from the Store (null if not connected → fallback mode)
-    const store = await Store.findById(storeId);
+    // Resolve Meta credentials from StoreConnections (null if not connected → fallback mode)
+    const connections = await StoreConnections.findOne({ storeId: new mongoose.Types.ObjectId(storeId) });
     const credentials: IMetaCredentials | null =
-      store?.metaConnected && store?.metaPageAccessToken && store?.metaPageId
+      connections?.metaConnected && connections?.metaPageAccessToken && connections?.metaPageId
         ? {
-            pageId: store.metaPageId,
-            pageAccessToken: store.metaPageAccessToken,
-            instagramAccountId: store.instagramAccountId ?? '',
-          }
+          pageId: connections.metaPageId,
+          pageAccessToken: connections.metaPageAccessToken,
+          instagramAccountId: connections.instagramAccountId ?? '',
+        }
         : null;
 
     // Use the factory to get the correct provider (real or fallback)
     const provider = createProvider(conversation.channel, credentials);
     await provider.sendMessage(storeId, conversation._id.toString(), text, recipientExternalId);
+    // ...
 
     return res.status(201).json(newMessage);
   } catch (error: any) {

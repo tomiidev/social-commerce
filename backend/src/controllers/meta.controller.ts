@@ -15,19 +15,13 @@
 
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { Store } from '../models/Store';
+import { StoreConnections } from '../models/StoreConnections';
 import { Post } from '../models/Post';
 import { Product } from '../models/Product';
-import {
-  getOAuthUrl,
-  exchangeCodeForToken,
-  getLongLivedUserToken,
-  getManagedPages,
-  getInstagramAccountId,
-} from '../services/meta.service';
 import { createProvider } from '../services/SocialProvider';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
+import { exchangeCodeForToken, getInstagramAccountId, getLongLivedUserToken, getManagedPages, getOAuthUrl } from '../services/meta.service';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const JWT_SECRET = process.env.JWT_SECRET || 'socialflow_secret';
@@ -109,7 +103,7 @@ export const handleOAuthCallback = async (req: Request, res: Response) => {
     }
 
     // Persist credentials in the Store
-    await Store.findByIdAndUpdate(storeId, {
+    await StoreConnections.findByIdAndUpdate(storeId, {
       metaConnected: true,
       metaPageId: pageId,
       metaPageAccessToken: pageAccessToken,
@@ -137,7 +131,7 @@ export const getMetaStatus = async (req: AuthRequest, res: Response) => {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    const store = await Store.findById(storeId).select(
+    const store = await StoreConnections.findById(storeId).select(
       'metaConnected metaPageId instagramAccountId'
     );
 
@@ -165,7 +159,7 @@ export const disconnectMeta = async (req: AuthRequest, res: Response) => {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    await Store.findByIdAndUpdate(storeId, {
+    await StoreConnections.findByIdAndUpdate(storeId, {
       metaConnected: false,
       metaPageId: '',
       metaPageAccessToken: '',
@@ -189,7 +183,7 @@ export const connectSimulated = async (req: AuthRequest, res: Response) => {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    await Store.findByIdAndUpdate(storeId, {
+    await StoreConnections.findByIdAndUpdate(storeId, {
       metaConnected: true,
       metaPageId: 'simulated_page_12345',
       metaPageAccessToken: 'simulated_page_access_token_xyz',
@@ -215,15 +209,15 @@ export const syncPosts = async (req: AuthRequest, res: Response) => {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    const store = await Store.findById(storeId);
-    if (!store) return res.status(404).json({ error: 'Tienda no encontrada' });
+    const connections = await StoreConnections.findOne({ storeId: new mongoose.Types.ObjectId(storeId) });
+    if (!connections) return res.status(404).json({ error: 'Conexiones no encontradas' });
 
     const credentials =
-      store.metaConnected && store.metaPageAccessToken && store.metaPageId
+      connections.metaConnected && connections.metaPageAccessToken && connections.metaPageId
         ? {
-            pageId: store.metaPageId,
-            pageAccessToken: store.metaPageAccessToken,
-            instagramAccountId: store.instagramAccountId ?? '',
+            pageId: connections.metaPageId,
+            pageAccessToken: connections.metaPageAccessToken,
+            instagramAccountId: connections.instagramAccountId ?? '',
           }
         : null;
 
@@ -290,15 +284,15 @@ export const syncProducts = async (req: AuthRequest, res: Response) => {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    const store = await Store.findById(storeId);
-    if (!store) return res.status(404).json({ error: 'Tienda no encontrada' });
+    const connections = await StoreConnections.findOne({ storeId: new mongoose.Types.ObjectId(storeId) });
+    if (!connections) return res.status(404).json({ error: 'Conexiones no encontradas' });
 
     const credentials =
-      store.metaConnected && store.metaPageAccessToken && store.metaPageId
+      connections.metaConnected && connections.metaPageAccessToken && connections.metaPageId
         ? {
-            pageId: store.metaPageId,
-            pageAccessToken: store.metaPageAccessToken,
-            instagramAccountId: store.instagramAccountId ?? '',
+            pageId: connections.metaPageId,
+            pageAccessToken: connections.metaPageAccessToken,
+            instagramAccountId: connections.instagramAccountId ?? '',
           }
         : null;
 
