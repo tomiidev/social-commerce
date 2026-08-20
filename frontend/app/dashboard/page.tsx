@@ -28,37 +28,13 @@ import {
 } from 'recharts';
 import { useRouter } from 'next/navigation';
 
-interface KPI {
-  queries: number;
-  queriesDiff: string;
-  conversations: number;
-  conversationsDiff: string;
-  products: number;
-  productsDiff: string;
-  sales: number;
-  salesDiff: string;
-  income: number;
-  incomeDiff: string;
-  salesBreakdown: {
-    instagram: number;
-    facebook: number;
-    mercadolibre: number;
-    shopify: number;
-  };
-  responseRate: number;
-}
-
-interface ChartData {
-  dailyQueries: { date: string; dayName: string; consultas: number }[];
-  channelDistribution: { name: string; value: number; queries: number }[];
-  topProducts: { name: string; queriesCount: number; price: number; image: string }[];
-}
+import { KPI, ChartData, Event } from '../../types/dashboard';
 
 export default function DashboardPage() {
   const [range, setRange] = useState<'7' | '30' | '90'>('7');
   const [kpis, setKpis] = useState<KPI | null>(null);
   const [charts, setCharts] = useState<ChartData | null>(null);
-  const [events, setEvents] = useState<any[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -75,11 +51,11 @@ export default function DashboardPage() {
     try {
       // Fetch data in parallel from optimized endpoints
       const [analyticsRes, topProductsRes, eventsRes, productsCountRes, salesSummaryRes] = await Promise.all([
-        api.get(`/analytics?days=${range}`),
-        api.get(`/products/most-consulted`),
-        api.get(`/events`),
-        api.get(`/products/count`),
-        api.get(`/sales/summary`)
+        api.get<{ kpis: KPI; charts: ChartData }>(`/analytics?days=${range}`),
+        api.get<ChartData['topProducts']>(`/products/most-consulted`),
+        api.get<Event[]>(`/events`),
+        api.get<{ count: number }>(`/products/count`),
+        api.get<{ totalIncome: number; salesBreakdown: KPI['salesBreakdown'] }>(`/sales/summary`)
       ]);
       
       setKpis({
@@ -117,7 +93,7 @@ export default function DashboardPage() {
     return 'Hace un tiempo';
   };
 
-  const getEventActivity = (event: any) => {
+  const getEventActivity = (event: Event) => {
     let icon: React.FC<{ className?: string }> = MessageSquare;
     let iconColor = 'text-slate-500 bg-slate-50';
     let link: string | undefined;
@@ -197,7 +173,7 @@ export default function DashboardPage() {
             <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Ventas'}</span>
           </button>
           <button
-            onClick={fetchData}
+            onClick={() => fetchData()}
             className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-slate-100 rounded-xl text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
