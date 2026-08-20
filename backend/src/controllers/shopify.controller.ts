@@ -43,6 +43,9 @@ export const importShopifyCustomers = async (req: AuthRequest, res: Response) =>
 
     return res.status(200).json({ message: `Se importaron ${importedCount} clientes.` });
   } catch (err: any) {
+    if (err.response) {
+      console.error('[Shopify] importShopifyCustomers error response:', JSON.stringify(err.response.data, null, 2));
+    }
     console.error('[Shopify] importShopifyCustomers error:', err?.message);
     return res.status(500).json({ error: 'Error al importar clientes de Shopify' });
   }
@@ -98,7 +101,7 @@ export const importShopifySales = async (req: AuthRequest, res: Response) => {
 
 const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY;
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET;
-const SHOPIFY_SCOPES = 'read_products,read_orders'; // Adjust as needed
+const SHOPIFY_SCOPES = 'read_products,read_orders,read_customers'
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5000';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const JWT_SECRET = process.env.JWT_SECRET || 'socialflow_secret';
