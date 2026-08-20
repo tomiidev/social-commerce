@@ -120,6 +120,8 @@ export const initiateAuth = async (req: AuthRequest, res: Response) => {
   
   const redirectUri = `${baseUrl}/api/shopify/auth/callback`;
   
+  console.log('[Shopify Debug] Auth URL construction:', { BACKEND_URL: process.env.BACKEND_URL, baseUrl, redirectUri });
+  
   const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${SHOPIFY_API_KEY}&scope=${SHOPIFY_SCOPES}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
 
   return res.status(200).json({ url: authUrl });
