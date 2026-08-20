@@ -5,6 +5,7 @@ import { Customer } from '../models/Customer';
 import { Product } from '../models/Product';
 import { StoreConnections } from '../models/StoreConnections';
 import { MeliProvider } from '../services/MeliProvider';
+import { callApi } from '../services/mercadolibre.service';
 import axios from 'axios';
 import mongoose from 'mongoose';
 
@@ -30,7 +31,7 @@ export const importAllSales = async (req: AuthRequest, res: Response) => {
     if (connections.meliConnected && connections.meliAccessToken) {
       try {
         const meliProvider = new MeliProvider(connections.meliAccessToken);
-        const me: { id: string } = await (meliProvider as any).callApi('/users/me', 'GET', connections.meliAccessToken);
+        const me: { id: string } = await callApi('/users/me', 'GET', connections.meliAccessToken);
         const orders = await meliProvider.getOrders(me.id);
 
         for (const order of orders) {
@@ -41,7 +42,8 @@ export const importAllSales = async (req: AuthRequest, res: Response) => {
             amount: order.total_amount,
             date: new Date(order.date_created),
             channel: 'mercadolibre',
-            status: order.status === 'paid' ? 'confirmed' : 'pending',
+            status: order.status === 'paid' ? 'confirmed' : order.status === 'cancelled' ? 'cancelled' : 'pending',
+            rawOrderData: order, // Store full order JSON
           });
           totalImported++;
         }

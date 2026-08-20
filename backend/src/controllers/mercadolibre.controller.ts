@@ -56,7 +56,8 @@ export const importMeliSales = async (req: AuthRequest, res: Response) => {
         amount: order.total_amount,
         date: new Date(order.date_created),
         channel: 'mercadolibre',
-        status: order.status === 'paid' ? 'confirmed' : 'pending',
+        status: order.status === 'paid' ? 'confirmed' : order.status === 'cancelled' ? 'cancelled' : 'pending',
+        rawOrderData: order, // Store full order JSON
       });
       importedCount++;
     }
@@ -249,6 +250,8 @@ export const importMeliCustomers = async (req: AuthRequest, res: Response) => {
     let importedCount = 0;
     for (const order of orders) {
       const buyer = order.buyer;
+      console.log('[DEBUG] Order object:', JSON.stringify(order));
+      console.log('[DEBUG] Buyer object:', JSON.stringify(buyer));
       if (!buyer) continue;
 
       // Check if customer already exists
@@ -259,9 +262,13 @@ export const importMeliCustomers = async (req: AuthRequest, res: Response) => {
       });
 
       if (!existingCustomer) {
+        const name = (buyer.first_name || buyer.last_name) 
+          ? `${buyer.first_name || ''} ${buyer.last_name || ''}`.trim() 
+          : (buyer.nickname || 'Sin nombre');
+
         await Customer.create({
           storeId,
-          name: buyer.first_name + ' ' + buyer.last_name,
+          name,
           username: buyer.nickname || buyer.id.toString(),
           avatar: '',
           channel: 'mercadolibre',

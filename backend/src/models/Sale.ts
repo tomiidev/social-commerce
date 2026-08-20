@@ -8,6 +8,7 @@ export interface ISale extends Document {
   date: Date;
   channel: 'instagram' | 'facebook' | 'mercadolibre' | 'shopify';
   status: 'pending' | 'confirmed' | 'cancelled';
+  rawOrderData?: Record<string, any>; // Store complete raw API response
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,6 +22,7 @@ const SaleSchema = new Schema<ISale>(
     date: { type: Date, default: Date.now },
     channel: { type: String, enum: ['instagram', 'facebook', 'mercadolibre', 'shopify'], required: true },
     status: { type: String, enum: ['pending', 'confirmed', 'cancelled'], default: 'pending', index: true },
+    rawOrderData: { type: Schema.Types.Mixed }, // Use Mixed for flexible JSON structure
   },
   { timestamps: true }
 );
