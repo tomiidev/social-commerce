@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Backend for SocialFlow B2B Social Commerce",
   "main": "dist/server.js",
-  "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
