@@ -104,11 +104,14 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const JWT_SECRET = process.env.JWT_SECRET || 'socialflow_secret';
 
 export const initiateAuth = async (req: AuthRequest, res: Response) => {
-  const { shop } = req.query;
+  let { shop } = req.query;
   const storeId = req.user?.storeId;
 
-  if (!shop) return res.status(400).json({ error: 'Shop URL is required' });
+  if (!shop || typeof shop !== 'string') return res.status(400).json({ error: 'Shop URL is required' });
   if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+  // Sanitize shop URL: remove protocol and paths
+  shop = shop.replace(/^https?:\/\//, '').split('/')[0];
 
   const state = jwt.sign({ storeId }, JWT_SECRET, { expiresIn: '10m' });
   
@@ -120,7 +123,7 @@ export const initiateAuth = async (req: AuthRequest, res: Response) => {
   
   const redirectUri = `${baseUrl}/api/shopify/auth/callback`;
   
-  console.log('[Shopify Debug] Auth URL construction:', { BACKEND_URL: process.env.BACKEND_URL, baseUrl, redirectUri });
+  console.log('[Shopify Debug] Auth URL construction:', { BACKEND_URL: process.env.BACKEND_URL, baseUrl, redirectUri, shop });
   
   const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${SHOPIFY_API_KEY}&scope=${SHOPIFY_SCOPES}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
 
