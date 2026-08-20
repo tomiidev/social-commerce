@@ -1,4 +1,5 @@
 import { IProduct } from '../models/Product';
+import { NormalizedOrder } from '../types/order';
 import { callApi } from './mercadolibre.service';
 
 export class MeliProvider {
@@ -48,6 +49,30 @@ export class MeliProvider {
       console.error(`[MeliProvider] Error fetching orders for seller ${sellerId}:`, err?.message);
       throw new Error(`Error al obtener órdenes de Mercado Libre: ${err?.response?.data?.message || err?.message}`);
     }
+  }
+
+  normalizeOrder(order: any): NormalizedOrder {
+    return {
+      orderId: order.id.toString(),
+      externalOrderId: order.id.toString(),
+      platform: 'mercadolibre',
+      totalAmount: order.total_amount,
+      currency: order.currency_id,
+      status: (['pending', 'confirmed', 'cancelled', 'refunded'].includes(order.status) ? order.status : 'pending') as 'pending' | 'confirmed' | 'cancelled' | 'refunded',
+      dateCreated: new Date(order.date_created),
+      buyer: {
+        id: order.buyer.id.toString(),
+        nickname: order.buyer.nickname,
+      },
+      items: order.order_items.map((item: any) => ({
+        itemId: item.item.id,
+        title: item.item.title,
+        quantity: item.quantity,
+        unitPrice: item.unit_price,
+        sku: item.item.seller_sku,
+      })),
+      rawOrderData: order,
+    };
   }
 
   async createProduct(product: any): Promise<any> {

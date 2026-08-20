@@ -15,6 +15,8 @@ export class ShopifyService {
     const client = this.getClient(shopUrl, accessToken);
     const response = await client.get('/customers.json');
     
+    console.log('[ShopifyService] Raw customer data sample:', JSON.stringify(response.data.customers[0], null, 2));
+
     return response.data.customers.map((c: any) => ({
       externalId: c.id.toString(),
       name: `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.email || 'Sin nombre',
@@ -30,6 +32,8 @@ export class ShopifyService {
     
     const client = this.getClient(shopUrl, accessToken);
     const response = await client.get('/products.json');
+    
+    console.log('[ShopifyService] Raw product data sample:', JSON.stringify(response.data.products[0], null, 2));
     
     // Map Shopify products to internal IProduct format
     return response.data.products.map((p: any) => ({
