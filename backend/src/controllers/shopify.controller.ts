@@ -87,6 +87,7 @@ export const importShopifySales = async (req: AuthRequest, res: Response) => {
         date: new Date(order.created_at),
         channel: 'shopify',
         status: order.financial_status === 'paid' ? 'confirmed' : 'pending',
+        rawOrderData: order, // Store full order JSON
       });
       importedCount++;
     }

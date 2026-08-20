@@ -564,6 +564,7 @@ async function seed() {
         date: new Date(Date.now() - 1000 * 60 * 60 * 12), // 12 hours ago
         channel: 'instagram' as const,
         status: 'confirmed' as const,
+        rawOrderData: { id: 'order_123', vendor: 'instagram' },
       },
       {
         storeId: store._id,
@@ -573,6 +574,7 @@ async function seed() {
         date: new Date(Date.now() - 1000 * 60 * 60 * 36), // 1.5 days ago
         channel: 'facebook' as const,
         status: 'confirmed' as const,
+        rawOrderData: { id: 'order_124', vendor: 'facebook' },
       },
       {
         storeId: store._id,
@@ -582,6 +584,7 @@ async function seed() {
         date: new Date(Date.now() - 1000 * 60 * 60 * 48), // 2 days ago
         channel: 'instagram' as const,
         status: 'confirmed' as const,
+        rawOrderData: { id: 'order_125', vendor: 'instagram' },
       },
       {
         storeId: store._id,
@@ -591,6 +594,7 @@ async function seed() {
         date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4), // 4 days ago
         channel: 'instagram' as const,
         status: 'confirmed' as const,
+        rawOrderData: { id: 'order_126', vendor: 'instagram' },
       },
       {
         storeId: store._id,
@@ -600,6 +604,7 @@ async function seed() {
         date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 6), // 6 days ago
         channel: 'instagram' as const,
         status: 'confirmed' as const,
+        rawOrderData: { id: 'order_127', vendor: 'instagram' },
       },
       {
         storeId: store._id,
@@ -609,6 +614,7 @@ async function seed() {
         date: new Date(Date.now() - 1000 * 60 * 60 * 4), // 4 hours ago
         channel: 'facebook' as const,
         status: 'pending' as const, // Pending sale
+        rawOrderData: { id: 'order_128', vendor: 'facebook' },
       },
       {
         storeId: store._id,
@@ -618,6 +624,7 @@ async function seed() {
         date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 1.2), // 1.2 days ago
         channel: 'instagram' as const,
         status: 'cancelled' as const, // Cancelled sale
+        rawOrderData: { id: 'order_129', vendor: 'instagram' },
       }
     ];
 

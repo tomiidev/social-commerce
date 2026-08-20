@@ -8,7 +8,7 @@ export interface ISale extends Document {
   date: Date;
   channel: 'instagram' | 'facebook' | 'mercadolibre' | 'shopify';
   status: 'pending' | 'confirmed' | 'cancelled';
-  rawOrderData?: Record<string, any>; // Store complete raw API response
+  rawOrderData: Record<string, any>; // Store complete raw API response
   createdAt: Date;
   updatedAt: Date;
 }

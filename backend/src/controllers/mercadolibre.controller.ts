@@ -44,22 +44,40 @@ export const importMeliSales = async (req: AuthRequest, res: Response) => {
 
     let importedCount = 0;
     for (const order of orders) {
-      // Check if sale already exists (using order.id as a unique identifier if needed, 
-      // but schema doesn't have meliOrderId, I might need to add it or use amount/date as proxy)
-      // I'll skip existing sale check for simplicity for now.
+      // Find or create customer
+      const buyerId = order.buyer.id.toString();
+      let customer = await Customer.findOne({ storeId, externalId: buyerId, channel: 'mercadolibre' });
       
-      // Map order to Sale
-      const sale = await Sale.create({
-        storeId,
-        customerId: new mongoose.Types.ObjectId(), // Placeholder, needs proper customer mapping
-        productId: new mongoose.Types.ObjectId(), // Placeholder, needs proper product mapping
-        amount: order.total_amount,
-        date: new Date(order.date_created),
-        channel: 'mercadolibre',
-        status: order.status === 'paid' ? 'confirmed' : order.status === 'cancelled' ? 'cancelled' : 'pending',
-        rawOrderData: order, // Store full order JSON
-      });
-      importedCount++;
+      if (!customer) {
+        customer = await Customer.create({
+          storeId,
+          name: order.buyer.nickname,
+          username: order.buyer.nickname,
+          externalId: buyerId,
+          channel: 'mercadolibre',
+        });
+      }
+
+      // Find product
+      const itemId = order.order_items[0].item.id;
+      const product = await Product.findOne({ storeId, meliItemId: itemId });
+      
+      if (product) {
+        // Map order to Sale
+        await Sale.create({
+          storeId,
+          customerId: customer._id,
+          productId: product._id,
+          amount: order.total_amount,
+          date: new Date(order.date_created),
+          channel: 'mercadolibre',
+          status: order.status === 'paid' ? 'confirmed' : order.status === 'cancelled' ? 'cancelled' : 'pending',
+          rawOrderData: order, // Store full order JSON
+        });
+        customer.purchasesCount += 1;
+        await customer.save();
+        importedCount++;
+      }
     }
 
     return res.status(200).json({ message: `Se importaron ${importedCount} ventas.` });
