@@ -19,7 +19,7 @@ import mongoose from 'mongoose';
 import { MeliProvider } from '../services/MeliProvider';
 import { MeliQuestion } from '../models/MeliQuestion';
 import { Product } from '../models/Product';
-import { exchangeCodeForToken, getOAuthUrl } from '../services/mercadolibre.service';
+import { exchangeCodeForToken, getOAuthUrl, callApi } from '../services/mercadolibre.service';
 import jwt from "jsonwebtoken"
 // ... existing imports ...
 
@@ -38,7 +38,7 @@ export const importMeliSales = async (req: AuthRequest, res: Response) => {
     }
 
     const meliProvider = new MeliProvider(connections.meliAccessToken);
-    const me: { id: string } = await (meliProvider as any).callApi('/users/me', 'GET', connections.meliAccessToken);
+    const me: { id: string } = await callApi('/users/me', 'GET', connections.meliAccessToken);
     
     const orders = await meliProvider.getOrders(me.id);
 
@@ -242,7 +242,7 @@ export const importMeliCustomers = async (req: AuthRequest, res: Response) => {
     }
 
     const meliProvider = new MeliProvider(connections.meliAccessToken);
-    const me: { id: string } = await (meliProvider as any).callApi('/users/me', 'GET', connections.meliAccessToken);
+    const me: { id: string } = await callApi('/users/me', 'GET', connections.meliAccessToken);
     
     const orders = await meliProvider.getOrders(me.id);
 
