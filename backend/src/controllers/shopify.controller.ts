@@ -114,7 +114,7 @@ export const initiateAuth = async (req: AuthRequest, res: Response) => {
   
   // Ensure BACKEND_URL starts with https://
   let baseUrl = BACKEND_URL;
-  if (!baseUrl.startsWith('http')) {
+  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
     baseUrl = `https://${baseUrl}`;
   }
   
