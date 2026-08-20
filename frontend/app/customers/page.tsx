@@ -14,7 +14,7 @@ import {
   FileText,
   Tag
 } from 'lucide-react';
-import { InstagramIcon, FacebookIcon } from '../../components/SocialIcons';
+import { InstagramIcon, FacebookIcon, ShopifyIcon, MeliIcon } from '../../components/SocialIcons';
 
 interface Customer {
   _id: string;
@@ -186,7 +186,26 @@ export default function CustomersPage() {
                 </tr>
               ) : (
                 filteredCustomers.map(cust => {
-                  const ChannelIcon = cust.channel === 'instagram' ? InstagramIcon : FacebookIcon;
+                  let ChannelIcon;
+                  let channelClasses = '';
+                  
+                  if (cust.channel === 'instagram') {
+                    ChannelIcon = InstagramIcon;
+                    channelClasses = 'bg-pink-50 text-pink-600 border-pink-100';
+                  } else if (cust.channel === 'facebook') {
+                    ChannelIcon = FacebookIcon;
+                    channelClasses = 'bg-blue-50 text-blue-600 border-blue-100';
+                  } else if (cust.channel === 'shopify') {
+                    ChannelIcon = ShopifyIcon;
+                    channelClasses = 'bg-slate-100 text-slate-800 border-slate-200';
+                  } else if (cust.channel === 'mercadolibre') {
+                    ChannelIcon = MeliIcon;
+                    channelClasses = 'bg-yellow-50 text-yellow-600 border-yellow-100';
+                  } else {
+                    ChannelIcon = Users;
+                    channelClasses = 'bg-slate-50 text-slate-600 border-slate-200';
+                  }
+
                   return (
                     <tr
                       key={cust._id}
@@ -205,9 +224,7 @@ export default function CustomersPage() {
                         </div>
                       </td>
                       <td className="p-4">
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold flex items-center space-x-1 w-fit border ${
-                          cust.channel === 'instagram' ? 'bg-pink-50 text-pink-600 border-pink-100' : 'bg-blue-50 text-blue-600 border-blue-100'
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold flex items-center space-x-1 w-fit border ${channelClasses}`}>
                           <ChannelIcon className="h-3 w-3" />
                           <span className="capitalize">{cust.channel}</span>
                         </span>
