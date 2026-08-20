@@ -12,6 +12,9 @@ router.post('/disconnect', protect, controller.disconnectShopify);
 // Sales import
 router.post('/sales/import', protect, controller.importShopifySales);
 
+// Customers import
+router.post('/customers/import', protect, controller.importShopifyCustomers);
+
 // POST /api/shopify/webhook — Shopify inventory updates
 router.post('/webhook', controller.handleShopifyWebhook);
 

@@ -113,21 +113,22 @@ export default function CustomersPage() {
           <p className="text-xs text-slate-400">Administrá los contactos capturados de tus canales</p>
         </div>
         <button
-          onClick={async () => {
-            setLoading(true);
-            try {
-              await api.post('/mercadolibre/customers/import');
-              await fetchCustomers();
-            } catch (err) {
-              console.error('Error importing Meli customers:', err);
-              alert('Error al importar clientes.');
-            } finally {
-              setLoading(false);
-            }
-          }}
-          className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-slate-100 rounded-xl text-xs font-semibold text-amber-600 shadow-sm hover:bg-amber-50 transition-colors"
+        onClick={async () => {
+          setLoading(true);
+          try {
+            await api.post('/mercadolibre/customers/import');
+            await api.post('/shopify/customers/import');
+            await fetchCustomers();
+          } catch (err) {
+            console.error('Error importing customers:', err);
+            alert('Error al importar clientes.');
+          } finally {
+            setLoading(false);
+          }
+        }}
+        className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-slate-100 rounded-xl text-xs font-semibold text-amber-600 shadow-sm hover:bg-amber-50 transition-colors"
         >
-          <span>Importar clientes de ML</span>
+        <span>Importar clientes</span>
         </button>
       </div>
 

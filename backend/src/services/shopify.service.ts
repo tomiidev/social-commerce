@@ -11,6 +11,20 @@ export class ShopifyService {
     });
   }
 
+  static async syncCustomers(shopUrl: string, accessToken: string) {
+    const client = this.getClient(shopUrl, accessToken);
+    const response = await client.get('/customers.json');
+    
+    return response.data.customers.map((c: any) => ({
+      externalId: c.id.toString(),
+      name: `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.email || 'Sin nombre',
+      username: c.email || c.id.toString(),
+      avatar: '',
+      channel: 'shopify',
+      city: c.default_address?.city || '',
+    }));
+  }
+
   static async syncProducts(storeId: string, shopUrl?: string, accessToken?: string) {
     if (!shopUrl || !accessToken) return [];
     

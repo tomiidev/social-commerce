@@ -3,6 +3,8 @@ import { AuthRequest } from '../middleware/auth';
 import { StoreConnections } from '../models/StoreConnections';
 import { Product } from '../models/Product';
 import { Sale } from '../models/Sale';
+import { Customer } from '../models/Customer';
+import { ShopifyService } from '../services/shopify.service';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
@@ -10,7 +12,42 @@ import crypto from 'crypto';
 
 // ... existing code ...
 
-// ---------------------------------------------------------------------------
+export const importShopifyCustomers = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    const connections = await StoreConnections.findOne({ storeId: new mongoose.Types.ObjectId(storeId) });
+    if (!connections || !connections.shopifyAccessToken || !connections.shopifyShopUrl) {
+      return res.status(400).json({ error: 'Tienda no conectada a Shopify' });
+    }
+
+    const customers = await ShopifyService.syncCustomers(connections.shopifyShopUrl, connections.shopifyAccessToken);
+
+    let importedCount = 0;
+    for (const customerData of customers) {
+      const existingCustomer = await Customer.findOne({
+        storeId,
+        externalId: customerData.externalId,
+        channel: 'shopify'
+      });
+
+      if (!existingCustomer) {
+        await Customer.create({
+          storeId,
+          ...customerData
+        });
+        importedCount++;
+      }
+    }
+
+    return res.status(200).json({ message: `Se importaron ${importedCount} clientes.` });
+  } catch (err: any) {
+    console.error('[Shopify] importShopifyCustomers error:', err?.message);
+    return res.status(500).json({ error: 'Error al importar clientes de Shopify' });
+  }
+};
+
 // POST /api/shopify/sales/import
 // ---------------------------------------------------------------------------
 
