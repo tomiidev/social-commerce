@@ -32,6 +32,24 @@ export const getAnalytics = async (req: AuthRequest, res: Response) => {
     ]);
     const totalIncome = salesIncome[0]?.total || 0;
 
+    // Sales by channel
+    const salesByChannel = await Sale.aggregate([
+      { $match: { storeId: storeObjectId, status: 'confirmed' } },
+      { $group: { _id: '$channel', total: { $sum: '$amount' } } }
+    ]);
+
+    const salesBreakdown = {
+      instagram: 0,
+      facebook: 0,
+      mercadolibre: 0,
+      shopify: 0
+    };
+    salesByChannel.forEach(item => {
+      if (item._id && salesBreakdown.hasOwnProperty(item._id)) {
+        salesBreakdown[item._id as keyof typeof salesBreakdown] = item.total;
+      }
+    });
+
     // Response rate (simulated based on open/closed conversations)
     const closedConvs = await Conversation.countDocuments({ storeId: storeObjectId, status: 'closed' });
     const openConvs = await Conversation.countDocuments({ storeId: storeObjectId, status: 'open' });
@@ -136,6 +154,7 @@ export const getAnalytics = async (req: AuthRequest, res: Response) => {
         salesDiff: '+8% últimos 7 días',
         income: totalIncome,
         incomeDiff: '+12% últimos 7 días',
+        salesBreakdown,
         responseRate,
         responseRateDiff: '+5.6% últimos 7 días'
       },

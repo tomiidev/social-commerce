@@ -188,6 +188,11 @@ export default function ProductImporter({ isOpen, onClose, onImportSuccess }: Pr
           return { ...prod, [field]: arr };
         }
         
+        // Ensure string fields are trimmed
+        if (typeof value === 'string') {
+          return { ...prod, [field]: value.trim() };
+        }
+        
         return { ...prod, [field]: value };
       })
     );
@@ -197,7 +202,7 @@ export default function ProductImporter({ isOpen, onClose, onImportSuccess }: Pr
   const handleAddRow = () => {
     const newProd: ProductDomain = {
       id: `temp-added-${Date.now()}`,
-      name: 'Nuevo producto',
+      name: '', // Start empty to force user entry
       description: '',
       price: 0,
       stock: 0,
@@ -216,14 +221,21 @@ export default function ProductImporter({ isOpen, onClose, onImportSuccess }: Pr
 
   // Trigger Bulk Save to MongoDB
   const handleBulkSubmit = async () => {
-    // Validate products before sending
-    const invalidProducts = products.filter((p) => !p.name || p.price <= 0);
+    // Clean and validate products before sending
+    const cleanedProducts = products.map(p => ({
+      ...p,
+      name: p.name.trim(),
+      sku: p.sku.trim(),
+      description: p.description.trim()
+    }));
+
+    const invalidProducts = cleanedProducts.filter((p) => p.name === '' || p.price <= 0);
     if (invalidProducts.length > 0) {
       setError(`Hay ${invalidProducts.length} productos con errores (nombre vacío o precio menor/igual a 0). Corrígelos antes de guardar.`);
       return;
     }
 
-    if (products.length === 0) {
+    if (cleanedProducts.length === 0) {
       setError('No hay productos para importar.');
       return;
     }
@@ -233,7 +245,7 @@ export default function ProductImporter({ isOpen, onClose, onImportSuccess }: Pr
     setImportStatus(null);
 
     try {
-      const response = await api.post('/products/bulk', { products });
+      const response = await api.post('/products/bulk', { products: cleanedProducts });
       
       setImportStatus({
         success: true,

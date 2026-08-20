@@ -1,22 +1,38 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../providers';
 import {
-  Settings,
   Bot,
   CreditCard,
   User,
   Shield,
-  HelpCircle,
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
-import { InstagramIcon, FacebookIcon } from '../../components/SocialIcons';
+import { InstagramIcon, FacebookIcon, ShopifyIcon } from '../../components/SocialIcons';
 import api from '../../lib/api';
 
 export default function SettingsPage() {
-  const { store, user, updateStore } = useAuth();
+  const { store, updateStore } = useAuth();
+  
+  const profileRef = useRef<HTMLDivElement>(null);
+  const integrationsRef = useRef<HTMLDivElement>(null);
+  const subscriptionRef = useRef<HTMLDivElement>(null);
+
+  const [activeSection, setActiveSection] = useState('Perfil de la tienda');
+
+  const scrollToSection = (ref: React.RefObject<HTMLDivElement>, sectionName: string) => {
+    ref.current?.scrollIntoView({ behavior: 'smooth' });
+    setActiveSection(sectionName);
+  };
+
+  const navItems = [
+    { name: 'Perfil de la tienda', icon: User, ref: profileRef as React.RefObject<HTMLDivElement> },
+    { name: 'Canales vinculados', icon: Shield, ref: integrationsRef as React.RefObject<HTMLDivElement> },
+    { name: 'Suscripción y plan', icon: CreditCard, ref: subscriptionRef as React.RefObject<HTMLDivElement> }
+  ];
+
   
   // States
   const [storeName, setStoreName] = useState(store?.name || 'Tienda Urbana');
@@ -24,7 +40,6 @@ export default function SettingsPage() {
   
   // Real Meta Integrations States
   const [metaConnected, setMetaConnected] = useState(false);
-  const [metaDetails, setMetaDetails] = useState<{ pageId?: string; instagramAccountId?: string } | null>(null);
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [showSimulateModal, setShowSimulateModal] = useState(false);
 
@@ -36,7 +51,6 @@ export default function SettingsPage() {
   const [aiUsage, setAiUsage] = useState({ tokensUsed: 0, tokenLimit: 0 });
 
   // Form notifications
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -73,14 +87,6 @@ export default function SettingsPage() {
         // Fetch Meta
         const resMeta = await api.get('/meta/status');
         setMetaConnected(resMeta.data.connected);
-        if (resMeta.data.connected) {
-          setMetaDetails({
-            pageId: resMeta.data.pageId,
-            instagramAccountId: resMeta.data.instagramAccountId
-          });
-        } else {
-          setMetaDetails(null);
-        }
 
         // Fetch Meli
         const resMeli = await api.get('/mercadolibre/status');
@@ -89,8 +95,8 @@ export default function SettingsPage() {
         // Fetch AI Usage
         const resAi = await api.get('/ai/token-usage');
         setAiUsage(resAi.data);
-      } catch (err) {
-        console.error('Error fetching connection status:', err);
+      } catch (_err) {
+        console.error('Error fetching connection status:', _err);
       }
     };
 
@@ -126,8 +132,6 @@ export default function SettingsPage() {
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     updateStore(storeName, plan);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
   };
 
   const handleConnectMeta = async () => {
@@ -140,7 +144,7 @@ export default function SettingsPage() {
       } else {
         throw new Error('No auth URL received');
       }
-    } catch (err) {
+    } catch (_err) {
       console.warn('Real Meta connection failed or APP_ID not set. Showing simulated fallback prompt.');
       setShowSimulateModal(true);
     } finally {
@@ -157,11 +161,10 @@ export default function SettingsPage() {
     try {
       await api.post('/meta/disconnect');
       setMetaConnected(false);
-      setMetaDetails(null);
       setSuccessMsg('Canales de Meta desconectados correctamente.');
       setTimeout(() => setSuccessMsg(null), 4000);
-    } catch (err) {
-      console.error('Error disconnecting Meta:', err);
+    } catch (_err) {
+      console.error('Error disconnecting Meta:', _err);
       setErrorMsg('Error al desconectar la cuenta de Meta.');
       setTimeout(() => setErrorMsg(null), 4000);
     } finally {
@@ -179,8 +182,8 @@ export default function SettingsPage() {
       } else {
         throw new Error('No auth URL received');
       }
-    } catch (err) {
-      console.error('Error connecting Meli:', err);
+    } catch (_err) {
+      console.error('Error connecting Meli:', _err);
       setErrorMsg('Error al iniciar la conexión con Mercado Libre.');
       setTimeout(() => setErrorMsg(null), 4000);
     } finally {
@@ -199,8 +202,8 @@ export default function SettingsPage() {
       setMeliConnected(false);
       setSuccessMsg('Cuenta de Mercado Libre desconectada correctamente.');
       setTimeout(() => setSuccessMsg(null), 4000);
-    } catch (err) {
-      console.error('Error disconnecting Meli:', err);
+    } catch (_err) {
+      console.error('Error disconnecting Meli:', _err);
       setErrorMsg('Error al desconectar la cuenta de Mercado Libre.');
       setTimeout(() => setErrorMsg(null), 4000);
     } finally {
@@ -215,14 +218,10 @@ export default function SettingsPage() {
     try {
       await api.post('/meta/connect-simulated');
       setMetaConnected(true);
-      setMetaDetails({
-        pageId: 'simulated_page_12345',
-        instagramAccountId: 'simulated_instagram_12345'
-      });
       setSuccessMsg('¡Conexión simulada de desarrollo activada correctamente!');
       setTimeout(() => setSuccessMsg(null), 5000);
-    } catch (err) {
-      console.error('Error activating simulation:', err);
+    } catch (_err) {
+      console.error('Error activating simulation:', _err);
       setErrorMsg('Error al activar la conexión simulada.');
       setTimeout(() => setErrorMsg(null), 4000);
     } finally {
@@ -243,18 +242,14 @@ export default function SettingsPage() {
         
         {/* Left column navigation */}
         <div className="md:col-span-1 space-y-2">
-          {[
-            { name: 'Perfil de la tienda', icon: User, active: true },
-            { name: 'Canales vinculados', icon: Shield, active: false },
-            { name: 'Suscripción y plan', icon: CreditCard, active: false },
-            { name: 'Soporte técnico', icon: HelpCircle, active: false }
-          ].map((item, idx) => {
+          {navItems.map((item, idx) => {
             const Icon = item.icon;
             return (
               <button
                 key={idx}
+                onClick={() => scrollToSection(item.ref, item.name)}
                 className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center space-x-2.5 transition ${
-                  item.active 
+                  activeSection === item.name
                     ? 'bg-indigo-50 text-indigo-600' 
                     : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
                 }`}
@@ -270,186 +265,76 @@ export default function SettingsPage() {
         <div className="md:col-span-2 space-y-6">
           
           {successMsg && (
-            <div className="flex items-center space-x-2 p-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl text-xs font-semibold animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="flex items-center space-x-2 p-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl text-xs font-semibold">
               <CheckCircle2 className="h-4.5 w-4.5 shrink-0" />
               <span>{successMsg}</span>
             </div>
           )}
 
           {errorMsg && (
-            <div className="flex items-center space-x-2 p-3 bg-rose-50 text-rose-700 border border-rose-100 rounded-xl text-xs font-semibold animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="flex items-center space-x-2 p-3 bg-rose-50 text-rose-700 border border-rose-100 rounded-xl text-xs font-semibold">
               <AlertCircle className="h-4.5 w-4.5 shrink-0" />
               <span>{errorMsg}</span>
             </div>
           )}
 
-          {/* Profile Form */}
-          <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm space-y-4">
-            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider text-slate-400">Perfil</h3>
-            
-            {saveSuccess && (
-              <div className="flex items-center space-x-2 p-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl text-xs font-semibold">
-                <CheckCircle2 className="h-4.5 w-4.5" />
-                <span>Cambios guardados con éxito.</span>
-              </div>
-            )}
-
+          {/* Profile Section */}
+          <section ref={profileRef} className="bg-white border border-slate-100 p-6 rounded-3xl shadow-sm space-y-5">
+            <h3 className="text-sm font-bold text-slate-800">Perfil de la tienda</h3>
             <form onSubmit={handleSaveProfile} className="space-y-4 text-xs font-semibold text-slate-600">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block mb-1.5">Nombre de la tienda</label>
+                  <label className="block mb-1.5 text-[11px] text-slate-500">Nombre de la tienda</label>
                   <input
                     type="text"
                     required
                     value={storeName}
                     onChange={(e) => setStoreName(e.target.value)}
-                    className="w-full border border-slate-200 px-3 py-2.5 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 bg-slate-50/20"
+                    className="w-full border border-slate-200 px-4 py-3 rounded-2xl text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-slate-50/50"
                   />
                 </div>
-
                 <div>
-                  <label className="block mb-1.5">Plan de suscripción</label>
+                  <label className="block mb-1.5 text-[11px] text-slate-500">Plan</label>
                   <select
                     value={plan}
                     onChange={(e) => setPlan(e.target.value)}
-                    className="w-full border border-slate-200 px-3 py-2.5 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-indigo-500 bg-slate-50/20"
+                    className="w-full border border-slate-200 px-4 py-3 rounded-2xl text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-slate-50/50"
                   >
                     <option value="Plan Free">Plan Free</option>
-                    <option value="Plan Pro">Plan Pro (Recomendado)</option>
-                    <option value="Plan Enterprise">Plan Enterprise</option>
+                    <option value="Plan Pro">Plan Pro</option>
                   </select>
                 </div>
-
-                <div>
-                  <label className="block mb-1.5">Moneda base</label>
-                  <input
-                    type="text"
-                    disabled
-                    value="Pesos Uruguayos (UYU)"
-                    className="w-full border border-slate-200 px-3 py-2.5 rounded-xl text-slate-400 font-medium bg-slate-100 cursor-not-allowed"
-                  />
-                </div>
               </div>
-
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="submit"
-                  className="px-4.5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-semibold hover:bg-indigo-700 shadow-md shadow-indigo-150 transition"
-                >
-                  Guardar Perfil
-                </button>
-              </div>
+              <button type="submit" className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-bold hover:bg-indigo-700 transition">Guardar Cambios</button>
             </form>
-          </div>
+          </section>
 
-          {/* Social Channels Integration */}
-          <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider text-slate-400">Canales Vinculados (Meta)</h3>
-              {metaConnected && (
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-100 text-[10px] font-bold text-emerald-600 flex items-center space-x-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>Conectado</span>
-                </span>
-              )}
+          {/* Integration Sections */}
+          <section ref={integrationsRef} className="bg-white border border-slate-100 p-6 rounded-3xl shadow-sm space-y-5">
+            <h3 className="text-sm font-bold text-slate-800">Integraciones de Canales</h3>
+            <div className="space-y-4">
+              <IntegrationCard 
+                title="Meta (Facebook/Instagram)" 
+                connected={metaConnected} 
+                onConnect={handleConnectMeta} 
+                onDisconnect={handleDisconnectMeta}
+                loading={loadingMeta}
+                icon={<div className="flex -space-x-1"><div className="p-2 bg-pink-50 text-pink-600 rounded-full"><InstagramIcon className="h-4 w-4" /></div><div className="p-2 bg-blue-50 text-blue-600 rounded-full"><FacebookIcon className="h-4 w-4" /></div></div>}
+              />
+              <IntegrationCard 
+                title="Mercado Libre" 
+                connected={meliConnected} 
+                onConnect={handleConnectMeli} 
+                onDisconnect={handleDisconnectMeli}
+                loading={loadingMeli}
+                icon={<div className="p-2.5 bg-yellow-50 text-yellow-600 rounded-full font-bold text-[10px]">ML</div>}
+              />
+              <ShopifyConnectionCard />
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">Conectá las cuentas comerciales de Facebook e Instagram para habilitar el sincronizador de productos, publicaciones e Inbox.</p>
-
-            <div className="space-y-3.5">
-              {/* Instagram */}
-              <div className="flex items-center justify-between p-3 bg-slate-50/50 border border-slate-100 rounded-2xl">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2.5 rounded-xl bg-pink-50 text-pink-600"><InstagramIcon className="h-5 w-5" /></div>
-                  <div className="text-left text-xs">
-                    <span className="block font-bold text-slate-800">Instagram Commercial Business</span>
-                    <span className="text-[10px] text-slate-400">
-                      {metaConnected 
-                        ? `Vinculada${metaDetails?.instagramAccountId ? ` (ID: ${metaDetails.instagramAccountId})` : ''}` 
-                        : 'Desconectada'}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={metaConnected ? handleDisconnectMeta : handleConnectMeta}
-                  disabled={loadingMeta}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
-                    metaConnected 
-                      ? 'bg-white border-slate-200 text-rose-500 hover:bg-rose-50/50' 
-                      : 'bg-indigo-600 border-transparent text-white hover:bg-indigo-700 shadow-sm'
-                  }`}
-                >
-                  {loadingMeta ? 'Cargando...' : metaConnected ? 'Desconectar' : 'Conectar'}
-                </button>
-              </div>
-
-              {/* Facebook */}
-              <div className="flex items-center justify-between p-3 bg-slate-50/50 border border-slate-100 rounded-2xl">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600"><FacebookIcon className="h-5 w-5" /></div>
-                  <div className="text-left text-xs">
-                    <span className="block font-bold text-slate-800">Facebook Page Catalog</span>
-                    <span className="text-[10px] text-slate-400">
-                      {metaConnected 
-                        ? `Vinculada${metaDetails?.pageId ? ` (ID: ${metaDetails.pageId})` : ''}` 
-                        : 'Desconectada'}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={metaConnected ? handleDisconnectMeta : handleConnectMeta}
-                  disabled={loadingMeta}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
-                    metaConnected 
-                      ? 'bg-white border-slate-200 text-rose-500 hover:bg-rose-50/50' 
-                      : 'bg-indigo-600 border-transparent text-white hover:bg-indigo-700 shadow-sm'
-                  }`}
-                >
-                  {loadingMeta ? 'Cargando...' : metaConnected ? 'Desconectar' : 'Conectar'}
-                </button>
-              </div>
-            </div>
-
-            {/* Mercado Libre */}
-            <div className="mt-6 pt-6 border-t border-slate-100">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider text-slate-400">Canales Vinculados (Mercado Libre)</h3>
-                  {meliConnected && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-100 text-[10px] font-bold text-emerald-600 flex items-center space-x-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                      <span>Conectado</span>
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed mb-4">Conectá tu cuenta de vendedor para gestionar tus productos directamente desde la plataforma.</p>
-
-                <div className="flex items-center justify-between p-3 bg-slate-50/50 border border-slate-100 rounded-2xl">
-                    <div className="flex items-center space-x-3">
-                        <div className="p-2.5 rounded-xl bg-yellow-50 text-yellow-600 font-bold text-lg">ML</div>
-                        <div className="text-left text-xs">
-                            <span className="block font-bold text-slate-800">Mercado Libre Seller Account</span>
-                            <span className="text-[10px] text-slate-400">
-                                {meliConnected ? 'Vinculada' : 'Desconectada'}
-                            </span>
-                        </div>
-                    </div>
-                    <button
-                        onClick={meliConnected ? handleDisconnectMeli : handleConnectMeli}
-                        disabled={loadingMeli}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
-                            meliConnected 
-                                ? 'bg-white border-slate-200 text-rose-500 hover:bg-rose-50/50' 
-                                : 'bg-indigo-600 border-transparent text-white hover:bg-indigo-700 shadow-sm'
-                        }`}
-                    >
-                        {loadingMeli ? 'Cargando...' : meliConnected ? 'Desconectar' : 'Conectar'}
-                    </button>
-                </div>
-                <ShopifyConnectionCard />
-            </div>
-          </div>
-
+          </section>
+          
           {/* AI Usage Limits */}
-          <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm space-y-4">
+          <div ref={subscriptionRef} className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm space-y-4">
             <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider text-slate-400">Consumo de IA (Gemini API)</h3>
             
             <div className="space-y-3.5 text-xs font-semibold text-slate-600">
@@ -474,7 +359,6 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
-
         </div>
 
       </div>
@@ -513,6 +397,31 @@ export default function SettingsPage() {
   );
 }
 
+function IntegrationCard({ title, connected, onConnect, onDisconnect, loading, icon }: { title: string, connected: boolean, onConnect: () => void, onDisconnect: () => void, loading: boolean, icon: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between p-4 bg-slate-50/50 border border-slate-100 rounded-2xl">
+      <div className="flex items-center space-x-3">
+        {icon}
+        <div className="text-left text-xs">
+          <span className="block font-bold text-slate-800">{title}</span>
+          <span className={`text-[10px] font-semibold ${connected ? 'text-emerald-600' : 'text-slate-400'}`}>{connected ? 'Conectado' : 'Desconectado'}</span>
+        </div>
+      </div>
+      <button
+        onClick={connected ? onDisconnect : onConnect}
+        disabled={loading}
+        className={`px-4 py-2 rounded-xl text-xs font-bold border transition ${
+          connected 
+            ? 'bg-white border-slate-200 text-rose-500 hover:bg-rose-50/50' 
+            : 'bg-indigo-600 border-transparent text-white hover:bg-indigo-700'
+        } disabled:opacity-50`}
+      >
+        {loading ? 'Procesando...' : connected ? 'Desconectar' : 'Conectar'}
+      </button>
+    </div>
+  );
+}
+
 function ShopifyConnectionCard() {
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -528,7 +437,7 @@ function ShopifyConnectionCard() {
     try {
       const res = await api.get(`/shopify/auth/url?shop=${shopUrl}`);
       window.location.href = res.data.url;
-    } catch (err) {
+    } catch (_err) {
       alert('Error al iniciar la conexión');
       setLoading(false);
     }
@@ -546,18 +455,14 @@ function ShopifyConnectionCard() {
   };
 
   return (
-    <div className="mt-6 pt-6 border-t border-slate-100">
-      <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider text-slate-400 mb-4">Canales Vinculados (Shopify)</h3>
+    <div className="p-4 bg-slate-50/50 border border-slate-100 rounded-2xl">
+      <h3 className="text-xs font-bold text-slate-800 mb-2 flex items-center">
+        <ShopifyIcon className="h-4 w-4 mr-1.5" /> Shopify
+      </h3>
       {connected ? (
-        <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-100 rounded-2xl">
-          <span className="text-xs font-bold text-emerald-600">¡Tienda Shopify conectada!</span>
-          <button onClick={handleDisconnect} className="text-rose-500 font-semibold text-xs">Desconectar</button>
-        </div>
+        <div className="flex items-center justify-between"><span className="text-emerald-600 text-xs font-bold">Conectado</span><button onClick={handleDisconnect} className="text-rose-500 text-xs font-semibold">Desconectar</button></div>
       ) : (
-        <div className="space-y-3">
-          <input placeholder="shop.myshopify.com" value={shopUrl} onChange={e => setShopUrl(e.target.value)} className="w-full border p-2 rounded text-xs" />
-          <button onClick={handleConnect} disabled={loading} className="w-full bg-indigo-600 text-white p-2 rounded text-xs font-semibold">Conectar Shopify</button>
-        </div>
+        <div className="space-y-2"><input placeholder="shop.myshopify.com" value={shopUrl} onChange={e => setShopUrl(e.target.value)} className="w-full border p-2 rounded text-xs" /><button onClick={handleConnect} disabled={loading} className="w-full bg-indigo-600 text-white p-2 rounded text-xs font-semibold">Conectar Shopify</button></div>
       )}
     </div>
   );

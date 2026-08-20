@@ -15,4 +15,10 @@ router.post('/disconnect', protect, controller.disconnectMeli);
 // Questions
 router.get('/items/:itemId/questions', protect, controller.getProductQuestions);
 
+// Sales import
+router.post('/sales/import', protect, controller.importMeliSales);
+
+// Customers import
+router.post('/customers/import', protect, controller.importMeliCustomers);
+
 export default router;

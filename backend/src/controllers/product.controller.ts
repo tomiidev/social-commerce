@@ -80,6 +80,8 @@ export const getProductById = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ... existing exports ...
+
 export const getMostConsultedProducts = async (req: AuthRequest, res: Response) => {
   try {
     const storeId = req.user?.storeId;
@@ -96,14 +98,42 @@ export const getMostConsultedProducts = async (req: AuthRequest, res: Response) 
   }
 };
 
+export const getProductCount = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    const count = await Product.countDocuments({ storeId: new mongoose.Types.ObjectId(storeId) });
+    return res.status(200).json({ count });
+  } catch (error: any) {
+    console.error('Error fetching product count:', error);
+    return res.status(500).json({ error: 'Error al obtener conteo de productos' });
+  }
+};
+
+export const countProducts = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    const count = await Product.countDocuments({ storeId: new mongoose.Types.ObjectId(storeId) });
+    return res.status(200).json({ count });
+  } catch (error: any) {
+    console.error('Error fetching product count:', error);
+    return res.status(500).json({ error: 'Error al obtener conteo de productos' });
+  }
+};
+
 export const createProduct = async (req: AuthRequest, res: Response) => {
+// ...
   try {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
     const { 
       name, description, price, stock, sku, sizes, colors, image, channels, status,
-      vendor, productType, tags, compareAtPrice, weight, weightUnit, barcode
+      vendor, productType, tags, compareAtPrice, weight, weightUnit, barcode,
+      shipping, category_id, condition, attributes
     } = req.body;
 
     if (!name || price === undefined) {
@@ -142,7 +172,8 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
         try {
           const meliProvider = new MeliProvider(connections.meliAccessToken || null);
           await meliProvider.createProduct({
-            name, description, price, stock, image
+            name, description, price, stock, image, sku,
+            shipping, category_id, condition, attributes
           });
           publishedChannels.push('Mercado Libre');
         } catch (err: any) {
@@ -459,5 +490,49 @@ export const bulkCreateProducts = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error in bulk creation:', error);
     return res.status(500).json({ error: `Error al crear productos en lote: ${error.message}` });
+  }
+};
+
+/**
+ * Forces a global stock synchronization across all active channels.
+ */
+export const syncStockGlobal = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    const connections = await StoreConnections.findOne({ storeId: new mongoose.Types.ObjectId(storeId) });
+    if (!connections) return res.status(404).json({ error: 'Conexiones no encontradas' });
+
+    const products = await Product.find({ storeId: new mongoose.Types.ObjectId(storeId) });
+    const results = { success: 0, errors: [] as string[] };
+
+    for (const product of products) {
+      // Sync with Meli
+      if (product.channels.includes('mercadolibre') && connections.meliConnected && connections.meliAccessToken && product.meliItemId) {
+        try {
+          const meliProvider = new MeliProvider(connections.meliAccessToken);
+          await meliProvider.updateProduct(product.meliItemId, { available_quantity: product.stock });
+          results.success++;
+        } catch (err: any) {
+          results.errors.push(`Error Meli ${product.sku}: ${err.message}`);
+        }
+      }
+      
+      // Sync with Shopify
+      if (product.channels.includes('shopify') && connections.shopifyConnected && connections.shopifyAccessToken && connections.shopifyShopUrl && product.shopifyVariantId) {
+        try {
+          await ShopifyService.updateProductStock(connections.shopifyShopUrl, connections.shopifyAccessToken, product.shopifyVariantId, product.stock);
+          results.success++;
+        } catch (err: any) {
+          results.errors.push(`Error Shopify ${product.sku}: ${err.message}`);
+        }
+      }
+    }
+
+    return res.status(200).json({ message: 'Sincronización finalizada', results });
+  } catch (error: any) {
+    console.error('Error in global sync:', error);
+    return res.status(500).json({ error: 'Error en sincronización global' });
   }
 };

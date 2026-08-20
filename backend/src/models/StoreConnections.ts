@@ -10,6 +10,7 @@ export interface IStoreConnections extends Document {
   metaWebhookVerifyToken?: string;    // Custom token used for webhook challenge verification
   // Mercado Libre OAuth credentials
   meliConnected: boolean;
+  meliUserId?: string;
   meliAccessToken?: string;
   meliRefreshToken?: string;
   meliTokenExpiresAt?: Date;
@@ -30,6 +31,7 @@ const StoreConnectionsSchema = new Schema<IStoreConnections>(
     metaWebhookVerifyToken: { type: String, default: '' },
     // Mercado Libre credentials
     meliConnected: { type: Boolean, default: false },
+    meliUserId: { type: String, default: '' },
     meliAccessToken: { type: String, default: '' },
     meliRefreshToken: { type: String, default: '' },
     meliTokenExpiresAt: { type: Date },

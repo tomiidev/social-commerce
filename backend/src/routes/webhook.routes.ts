@@ -8,7 +8,7 @@
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
-import { verifyWebhook, handleWebhook } from '../controllers/webhook.controller';
+import { verifyWebhook, handleWebhook, handleMeliWebhook } from '../controllers/webhook.controller';
 
 const router = Router();
 
@@ -32,5 +32,8 @@ router.get('/', verifyWebhook);
 
 // POST /api/webhook/meta — Incoming message events
 router.post('/', captureRawBody, handleWebhook);
+
+// POST /api/webhook/mercadolibre — ML notifications
+router.post('/mercadolibre', handleMeliWebhook);
 
 export default router;

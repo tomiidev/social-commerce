@@ -82,6 +82,7 @@ export default function ProductsPage() {
 
   // Import Meta state
   const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [importerOpen, setImporterOpen] = useState(false);
 
   // Modal State
@@ -224,8 +225,14 @@ export default function ProductsPage() {
   // Handle Form Submit (Create or Update)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || price <= 0) {
-      showToast('error', 'El nombre y precio son requeridos');
+    
+    // Clean and validate
+    const cleanedName = name.trim();
+    const cleanedSku = sku.trim();
+    const cleanedDescription = description.trim();
+    
+    if (!cleanedName || price <= 0) {
+      showToast('error', 'El nombre es obligatorio y el precio debe ser mayor a 0');
       return;
     }
 
@@ -250,11 +257,11 @@ export default function ProductsPage() {
     }
 
     const payload = {
-      name,
-      description,
+      name: cleanedName,
+      description: cleanedDescription,
       price: Number(price),
       stock: Number(stock),
-      sku,
+      sku: cleanedSku,
       sizes: sizes.split(',').map(s => s.trim()).filter(Boolean),
       colors: colors.split(',').map(c => c.trim()).filter(Boolean),
       image: finalImageUrl,
@@ -313,6 +320,19 @@ export default function ProductsPage() {
     }
   };
 
+  // Global Stock Sync
+  const handleGlobalSync = async () => {
+    setSyncing(true);
+    try {
+      const res = await api.post('/products/sync-stock');
+      showToast('success', res.data.message);
+    } catch (err) {
+      showToast('error', 'Error en la sincronización de stock');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   // Channel toggle inside form
   const toggleChannel = (ch: 'instagram' | 'facebook') => {
     if (channels.includes(ch)) {
@@ -354,6 +374,14 @@ export default function ProductsPage() {
           >
             <RefreshCw className={`h-3.5 w-3.5 ${importing ? 'animate-spin' : ''}`} />
             <span>{importing ? 'Sincronizando...' : 'Importar proveedores'}</span>
+          </button>
+          <button
+            onClick={handleGlobalSync}
+            disabled={syncing}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-emerald-600 text-white rounded-xl text-xs font-semibold shadow-md shadow-emerald-150 hover:bg-emerald-700 transition disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
+            <span>{syncing ? 'Sincronizando stock...' : 'Sincronizar Stock'}</span>
           </button>
           <button
             onClick={handleOpenCreateModal}

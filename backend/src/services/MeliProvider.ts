@@ -30,6 +30,26 @@ export class MeliProvider {
     }
   }
 
+  async getOrders(sellerId: string): Promise<any[]> {
+    if (!this.accessToken) {
+      throw new Error('No hay token de acceso para Mercado Libre');
+    }
+
+    try {
+      const response: { results: any[] } = await callApi(
+        `/orders/search`,
+        'GET',
+        this.accessToken,
+        undefined,
+        { seller: sellerId, sort: 'date_desc', limit: 20 }
+      );
+      return response.results || [];
+    } catch (err: any) {
+      console.error(`[MeliProvider] Error fetching orders for seller ${sellerId}:`, err?.message);
+      throw new Error(`Error al obtener órdenes de Mercado Libre: ${err?.response?.data?.message || err?.message}`);
+    }
+  }
+
   async createProduct(product: any): Promise<any> {
     if (!this.accessToken) {
       throw new Error('No hay token de acceso para Mercado Libre');
@@ -38,15 +58,18 @@ export class MeliProvider {
     try {
       const payload = {
         title: product.name,
-        category_id: 'MLA3530', // Default category ID for testing - needs mapping in production
+        category_id: product.category_id || 'MLA3530',
         price: product.price,
         currency_id: 'UYU',
         available_quantity: product.stock,
         buying_mode: 'buy_it_now',
         listing_type_id: 'gold_special',
-        condition: 'new',
+        condition: product.condition || 'new',
         description: { plain_text: product.description },
-        pictures: [{ source: product.image }]
+        pictures: [{ source: product.image }],
+        seller_sku: product.sku,
+        attributes: product.attributes || [],
+        shipping: product.shipping || { mode: 'me2', local_pick_up: false, free_shipping: false }
       };
 
       const response = await callApi('/items', 'POST', this.accessToken, payload);
@@ -153,6 +176,7 @@ export class MeliProvider {
           image: product.thumbnail,
           channels: ['mercadolibre'] as ('instagram' | 'facebook' | 'mercadolibre')[],
           status: (product.status === 'active' ? 'active' : 'inactive') as 'active' | 'inactive',
+          meliItemId: product.id,
         };
       }));
 

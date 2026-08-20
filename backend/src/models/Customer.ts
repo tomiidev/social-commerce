@@ -5,7 +5,7 @@ export interface ICustomer extends Document {
   name: string;
   username: string;
   avatar: string;
-  channel: 'instagram' | 'facebook';
+  channel: 'instagram' | 'facebook' | 'mercadolibre' | 'shopify';
   // Meta external ID: IGSID (Instagram) or PSID (Facebook Messenger)
   externalId?: string;
   lastInteraction: Date;
@@ -24,7 +24,7 @@ const CustomerSchema = new Schema<ICustomer>(
     name: { type: String, required: true, trim: true },
     username: { type: String, required: true, trim: true },
     avatar: { type: String, default: '' },
-    channel: { type: String, enum: ['instagram', 'facebook'], required: true },
+    channel: { type: String, enum: ['instagram', 'facebook', 'mercadolibre', 'shopify'], required: true },
     externalId: { type: String, default: '', index: true },
     lastInteraction: { type: Date, default: Date.now },
     conversationsCount: { type: Number, default: 0 },

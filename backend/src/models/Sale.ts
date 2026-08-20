@@ -6,7 +6,7 @@ export interface ISale extends Document {
   productId: Schema.Types.ObjectId;
   amount: number;
   date: Date;
-  channel: 'instagram' | 'facebook';
+  channel: 'instagram' | 'facebook' | 'mercadolibre' | 'shopify';
   status: 'pending' | 'confirmed' | 'cancelled';
   createdAt: Date;
   updatedAt: Date;
@@ -19,7 +19,7 @@ const SaleSchema = new Schema<ISale>(
     productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true, index: true },
     amount: { type: Number, required: true },
     date: { type: Date, default: Date.now },
-    channel: { type: String, enum: ['instagram', 'facebook'], required: true },
+    channel: { type: String, enum: ['instagram', 'facebook', 'mercadolibre', 'shopify'], required: true },
     status: { type: String, enum: ['pending', 'confirmed', 'cancelled'], default: 'pending', index: true },
   },
   { timestamps: true }

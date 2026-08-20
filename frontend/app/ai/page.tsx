@@ -49,8 +49,8 @@ export default function AIAssistantPage() {
         try {
           const res = await api.get(`/ai/conversations/${selectedConversationId}`);
           // Map backend message format to frontend ChatMessage format
-          const formattedMessages = res.data.messages.map((m: any) => ({
-            id: Math.random().toString(), // Or use a unique ID from the backend if available
+          const formattedMessages = res.data.messages.map((m: { sender: 'user' | 'assistant', text: string, createdAt: string }) => ({
+            id: crypto.randomUUID(), 
             sender: m.sender,
             text: m.text,
             createdAt: m.createdAt
@@ -105,7 +105,7 @@ export default function AIAssistantPage() {
     }
 
     const userMessage: ChatMessage = {
-      id: Math.random().toString(),
+      id: crypto.randomUUID(),
       sender: 'user',
       text: textToSend,
       createdAt: new Date().toISOString()
@@ -142,7 +142,7 @@ export default function AIAssistantPage() {
       }
 
       const assistantMessage: ChatMessage = {
-        id: Math.random().toString(),
+        id: crypto.randomUUID(),
         sender: 'assistant',
         text: assistantReply,
         createdAt: new Date().toISOString()
@@ -159,7 +159,7 @@ export default function AIAssistantPage() {
     } catch (err) {
       console.error('Error talking to AI Assistant:', err);
       const errorMessage: ChatMessage = {
-        id: Math.random().toString(),
+        id: crypto.randomUUID(),
         sender: 'assistant',
         text: 'Disculpame, ocurrió un inconveniente al procesar tu consulta. Por favor, vuelve a intentarlo en un momento.',
         createdAt: new Date().toISOString()

@@ -39,6 +39,12 @@ interface KPI {
   salesDiff: string;
   income: number;
   incomeDiff: string;
+  salesBreakdown: {
+    instagram: number;
+    facebook: number;
+    mercadolibre: number;
+    shopify: number;
+  };
   responseRate: number;
 }
 
@@ -54,6 +60,8 @@ export default function DashboardPage() {
   const [charts, setCharts] = useState<ChartData | null>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const router = useRouter()
   useEffect(() => {
@@ -61,20 +69,31 @@ export default function DashboardPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (showRefreshState: boolean = true) => {
+    if (showRefreshState) setIsRefreshing(true);
+    else setLoading(true);
     try {
-      const [analyticsRes, topProductsRes, eventsRes] = await Promise.all([
+      // Fetch data in parallel from optimized endpoints
+      const [analyticsRes, topProductsRes, eventsRes, productsCountRes, salesSummaryRes] = await Promise.all([
         api.get(`/analytics?days=${range}`),
         api.get(`/products/most-consulted`),
-        api.get(`/events`)
+        api.get(`/events`),
+        api.get(`/products/count`),
+        api.get(`/sales/summary`)
       ]);
-      setKpis(analyticsRes.data.kpis);
+      
+      setKpis({
+        ...analyticsRes.data.kpis,
+        products: productsCountRes.data.count,
+        income: salesSummaryRes.data.totalIncome,
+        salesBreakdown: salesSummaryRes.data.salesBreakdown
+      });
       setCharts({ ...analyticsRes.data.charts, topProducts: topProductsRes.data });
       setEvents(eventsRes.data);
     } catch (error) {
       console.error('Error fetching dashboard analytics:', error);
     } finally {
+      if (showRefreshState) setIsRefreshing(false);
       setLoading(false);
     }
   };
@@ -164,13 +183,27 @@ export default function DashboardPage() {
           <h2 className="text-xl font-bold text-slate-800">Inicio</h2>
           <p className="text-xs text-slate-400">Resumen de la actividad de tus tiendas</p>
         </div>
-        <button
-          onClick={fetchData}
-          className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-slate-100 rounded-xl text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Actualizar</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={async () => {
+              setIsSyncing(true);
+              await api.post('/sales/import-all');
+              await fetchData(false); // Silent refresh
+              setIsSyncing(false);
+            }}
+            disabled={isSyncing}
+            className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-slate-100 rounded-xl text-xs font-semibold text-indigo-600 shadow-sm hover:bg-indigo-50 transition-colors disabled:opacity-50"
+          >
+            <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Ventas'}</span>
+          </button>
+          <button
+            onClick={fetchData}
+            className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-slate-100 rounded-xl text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Actualizar</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -190,7 +223,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* KPI 2 */}
+        {/* KPI 2 - Commented out
         <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex justify-between items-start">
           <div className="space-y-2">
             <span className="text-xs font-medium text-slate-400">Conversaciones</span>
@@ -204,6 +237,7 @@ export default function DashboardPage() {
             <MessageCircle className="h-5 w-5" />
           </div>
         </div>
+        */}
 
         {/* KPI 3 */}
         <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex justify-between items-start">
@@ -221,17 +255,17 @@ export default function DashboardPage() {
         </div>
 
         {/* KPI 4 */}
-        <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex justify-between items-start">
+        <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between">
           <div className="space-y-2">
-            <span className="text-xs font-medium text-slate-400">Ventas</span>
-            <div className="text-2xl font-bold text-slate-800">{kpis?.sales.toLocaleString() || '23'}</div>
-            <span className="text-[10px] font-semibold text-emerald-500 flex items-center space-x-1">
-              <TrendingUp className="h-3 w-3 inline mr-0.5" />
-              {kpis?.salesDiff}
-            </span>
+            <span className="text-xs font-medium text-slate-400">Ventas (Ingresos)</span>
+            <div className="text-xl font-bold text-slate-800">${kpis?.income.toLocaleString() || '0'}</div>
           </div>
-          <div className="p-2.5 rounded-xl bg-amber-50 text-amber-500">
-            <ArrowUpRight className="h-5 w-5" />
+          
+          <div className="grid grid-cols-4 gap-1 mt-3">
+             <div className="text-[9px] text-center font-bold text-slate-900"><span className="block">{kpis?.salesBreakdown.instagram || 0}</span>IG</div>
+             <div className="text-[9px] text-center font-bold text-slate-900"><span className="block">{kpis?.salesBreakdown.facebook || 0}</span>FB</div>
+             <div className="text-[9px] text-center font-bold text-slate-900"><span className="block">{kpis?.salesBreakdown.mercadolibre || 0}</span>ML</div>
+             <div className="text-[9px] text-center font-bold text-slate-900"><span className="block">{kpis?.salesBreakdown.shopify || 0}</span>SH</div>
           </div>
         </div>
       </div>

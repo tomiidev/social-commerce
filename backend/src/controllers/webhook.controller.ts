@@ -23,7 +23,10 @@ import { Customer } from '../models/Customer';
 import { Conversation } from '../models/Conversation';
 import { Message } from '../models/Message';
 import { Event } from '../models/Event';
+import { Product } from '../models/Product';
+import { StoreConnections } from '../models/StoreConnections';
 import { verifyWebhookSignature } from '../services/meta.service';
+import { callApi } from '../services/mercadolibre.service';
 
 // ---------------------------------------------------------------------------
 // GET /api/webhook/meta — Webhook challenge verification
@@ -55,6 +58,47 @@ export const verifyWebhook = async (req: Request, res: Response) => {
 
   console.warn('[Webhook] Verification failed — unknown verify token');
   return res.sendStatus(403);
+};
+
+// ---------------------------------------------------------------------------
+// POST /api/webhook/mercadolibre — Incoming events
+// ---------------------------------------------------------------------------
+
+/**
+ * Handles incoming webhook events from Mercado Libre.
+ */
+export const handleMeliWebhook = async (req: Request, res: Response) => {
+  // Acknowledge immediately to Mercado Libre
+  res.sendStatus(200);
+
+  try {
+    const { topic, resource, user_id } = req.body;
+    console.log(`[Webhook-Meli] Received event: ${topic} for resource: ${resource}`);
+
+    if (topic === 'items') {
+      const itemId = resource.split('/').pop();
+      console.log(`[Webhook-Meli] Item changed: ${itemId}.`);
+      
+      // 1. Find the connection for this ML user
+      const connection = await StoreConnections.findOne({ meliUserId: user_id });
+      if (!connection || !connection.meliAccessToken) {
+        console.warn(`[Webhook-Meli] No connection found for user ${user_id}`);
+        return;
+      }
+
+      // 2. Fetch updated item details from ML API
+      const item: any = await callApi(`/items/${itemId}`, 'GET', connection.meliAccessToken);
+      
+      // 3. Update stock in DB
+      await Product.findOneAndUpdate(
+        { storeId: connection.storeId, sku: item.seller_sku || item.id },
+        { stock: item.available_quantity }
+      );
+      console.log(`[Webhook-Meli] Successfully updated stock for item ${itemId} to ${item.available_quantity}`);
+    }
+  } catch (err: any) {
+    console.error('[Webhook-Meli] Error processing event:', err?.message);
+  }
 };
 
 // ---------------------------------------------------------------------------

@@ -29,6 +29,7 @@ export class ShopifyService {
       image: p.image?.src || 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?q=80&w=300',
       channels: ['shopify'],
       status: p.status === 'active' ? 'active' : 'inactive',
+      shopifyVariantId: p.variants[0]?.id?.toString(),
     }));
   }
 
@@ -89,5 +90,16 @@ export class ShopifyService {
 
     const response = await client.post('/products.json', shopifyProduct);
     return response.data.product;
+  }
+
+  static async updateProductStock(shopUrl: string, accessToken: string, variantId: string, stock: number) {
+    const client = this.getClient(shopUrl, accessToken);
+    // Note: This assumes we have the variant ID. 
+    await client.put(`/variants/${variantId}.json`, {
+      variant: {
+        id: variantId,
+        inventory_quantity: stock,
+      }
+    });
   }
 }

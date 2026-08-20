@@ -22,6 +22,8 @@ export interface IProduct extends Document {
   weight?: number;
   weightUnit?: string;
   barcode?: string;
+  shopifyVariantId?: string;
+  meliItemId?: string;
 }
 
 const ProductSchema = new Schema<IProduct>(
@@ -45,6 +47,8 @@ const ProductSchema = new Schema<IProduct>(
     weight: { type: Number },
     weightUnit: { type: String, default: 'kg' },
     barcode: { type: String, default: '' },
+    shopifyVariantId: { type: String },
+    meliItemId: { type: String },
   },
   { timestamps: true }
 );
