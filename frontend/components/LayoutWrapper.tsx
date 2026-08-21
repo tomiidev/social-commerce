@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../app/providers';
 import Link from 'next/link';
 import {
+  FileText,
   Home,
   Inbox,
   ShoppingBag,
@@ -51,10 +52,9 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
     { name: 'Inicio', href: '/dashboard', icon: Home },
     { name: 'Inbox', href: '/inbox', icon: Inbox, countKey: 'conversations' },
     { name: 'Productos', href: '/products', icon: ShoppingBag },
-/*     { name: 'Publicaciones', href: '/posts', icon: Share2 }, */
-    /* { name: 'Analytics', href: '/analytics', icon: BarChart3 }, */
     { name: 'Clientes', href: '/customers', icon: Users },
     { name: 'Ventas', href: '/sales', icon: DollarSign },
+    { name: 'Facturación', href: '/billing', icon: FileText },
     { name: 'Asistente IA', href: '/ai', icon: Bot, highlight: true },
     { name: 'Configuración', href: '/settings', icon: Settings },
   ];
@@ -69,6 +69,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
       case '/analytics': return 'Analytics';
       case '/customers': return 'Clientes';
       case '/sales': return 'Ventas';
+      case '/billing': return 'Facturación';
       case '/ai': return 'Asistente IA';
       case '/settings': return 'Configuración';
       default: return 'SocialFlow';

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { NormalizedOrder } from '../types/order';
 
 export class ShopifyService {
   private static getClient(shopUrl: string, accessToken: string) {
@@ -9,6 +10,31 @@ export class ShopifyService {
         'Content-Type': 'application/json',
       },
     });
+  }
+
+  static normalizeOrder(order: any): NormalizedOrder {
+    return {
+      orderId: order.id.toString(),
+      externalOrderId: order.id.toString(),
+      platform: 'shopify',
+      totalAmount: parseFloat(order.total_price),
+      currency: order.currency,
+      // Map Shopify status (simplified mapping)
+      status: order.cancelled_at ? 'cancelled' : (order.financial_status === 'paid' ? 'confirmed' : 'pending'),
+      dateCreated: new Date(order.created_at),
+      buyer: {
+        id: order.customer?.id?.toString() || 'anonymous',
+        nickname: order.customer ? `${order.customer.first_name} ${order.customer.last_name}`.trim() : 'Guest',
+      },
+      items: order.line_items.map((item: any) => ({
+        itemId: item.product_id?.toString() || item.id.toString(),
+        title: item.title,
+        quantity: item.quantity,
+        unitPrice: parseFloat(item.price),
+        sku: item.sku,
+      })),
+      rawOrderData: order,
+    };
   }
 
   static async syncCustomers(shopUrl: string, accessToken: string) {

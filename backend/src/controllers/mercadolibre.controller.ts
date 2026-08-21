@@ -21,7 +21,99 @@ import { MeliQuestion } from '../models/MeliQuestion';
 import { Product } from '../models/Product';
 import { exchangeCodeForToken, getOAuthUrl, callApi } from '../services/mercadolibre.service';
 import jwt from "jsonwebtoken"
-// ... existing imports ...
+import { MeliReport } from '../models/MeliReport';
+import { BillingTransaction } from '../models/BillingTransaction';
+import { BillingSummary } from '../models/BillingSummary';
+
+// ---------------------------------------------------------------------------
+// GET /api/mercadolibre/reports
+// ---------------------------------------------------------------------------
+export const getMeliBillingDocuments = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    // Fetch imported billing transactions from DB
+    const transactions = await BillingTransaction.find({ storeId: new mongoose.Types.ObjectId(storeId) })
+      .sort({ date: -1 });
+
+    // Calculate summary statistics
+    let totalCharges = 0;
+    let totalRefunds = 0;
+
+    transactions.forEach(t => {
+      if (t.type === 'charge') {
+        totalCharges += t.amount;
+      } else if (t.type === 'refund') {
+        totalRefunds += Math.abs(t.amount); 
+      }
+    });
+
+    return res.status(200).json({
+      transactions,
+      summary: {
+        totalCharges,
+        totalRefunds,
+        balance: totalCharges - totalRefunds
+      }
+    });
+  } catch (err: any) {
+    console.error('[MercadoLibre] getMeliBillingDocuments error:', err?.message);
+    return res.status(500).json({ error: 'Error al obtener detalles de facturación' });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// GET /api/mercadolibre/reports
+// ---------------------------------------------------------------------------
+export const getMeliReports = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+
+    const total = await MeliReport.countDocuments({ storeId: new mongoose.Types.ObjectId(storeId) });
+    const reports = await MeliReport.find({ storeId: new mongoose.Types.ObjectId(storeId) })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const connections = await StoreConnections.findOne({ storeId: new mongoose.Types.ObjectId(storeId) });
+
+    if (connections && connections.meliAccessToken) {
+      const meliProvider = new MeliProvider(
+      connections.meliAccessToken,
+      connections.meliRefreshToken || null,
+      connections.storeId as any
+    );
+
+      for (const report of reports) {
+        if (['PENDING', 'PROCESSING'].includes(report.status)) {
+          try {
+            const statusData = await meliProvider.getBillingReportStatus(report.reportId);
+            if (statusData.status !== report.status) {
+              report.status = statusData.status;
+              if (statusData.status === 'READY') {
+                report.downloadUrl = statusData.download_url;
+              }
+              await report.save();
+            }
+          } catch (e) {
+            console.error(`[MercadoLibre] Error updating report ${report.reportId} status`);
+          }
+        }
+      }
+    }
+
+    return res.status(200).json({ reports, total, page, limit });
+  } catch (err: any) {
+    console.error('[MercadoLibre] getMeliReports error:', err?.message);
+    return res.status(500).json({ error: 'Error al obtener reportes' });
+  }
+};
 
 // ---------------------------------------------------------------------------
 // POST /api/mercadolibre/sales/import
@@ -37,18 +129,26 @@ export const importMeliSales = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Tienda no conectada a Mercado Libre' });
     }
 
-    const meliProvider = new MeliProvider(connections.meliAccessToken);
+    const meliProvider = new MeliProvider(
+      connections.meliAccessToken,
+      connections.meliRefreshToken || null,
+      connections.storeId as any
+    );
     const me: { id: string } = await callApi('/users/me', 'GET', connections.meliAccessToken);
     
     const orders = await meliProvider.getOrders(me.id);
+    console.log(`[MercadoLibre] Found ${orders.length} orders to process.`);
 
     let importedCount = 0;
     for (const order of orders) {
+      console.log(`[MercadoLibre] Processing order ${order.id} with ${order.order_items.length} items`);
+      
       // Find or create customer
       const buyerId = order.buyer.id.toString();
       let customer = await Customer.findOne({ storeId, externalId: buyerId, channel: 'mercadolibre' });
       
       if (!customer) {
+        console.log(`[MercadoLibre] Creating new customer ${buyerId}`);
         customer = await Customer.create({
           storeId,
           name: order.buyer.nickname,
@@ -58,26 +158,42 @@ export const importMeliSales = async (req: AuthRequest, res: Response) => {
         });
       }
 
-      // Find product
-      const itemId = order.order_items[0].item.id;
-      const product = await Product.findOne({ storeId, meliItemId: itemId });
-      
-      if (product) {
-        // Map order to Sale
-        await Sale.create({
-          storeId,
-          customerId: customer._id,
-          productId: product._id,
-          amount: order.total_amount,
-          date: new Date(order.date_created),
-          channel: 'mercadolibre',
-          status: order.status === 'paid' ? 'confirmed' : order.status === 'cancelled' ? 'cancelled' : 'pending',
-          rawOrderData: order, // Store full order JSON
-        });
-        customer.purchasesCount += 1;
-        await customer.save();
-        importedCount++;
+      // Process each item in the order
+      for (const orderItem of order.order_items) {
+        const itemId = orderItem.item.id;
+        console.log(`[MercadoLibre] Looking for product ${itemId}`);
+        const product = await Product.findOne({ storeId, meliItemId: itemId });
+        
+        if (product) {
+          console.log(`[MercadoLibre] Found product ${product._id}, creating sale.`);
+          
+          // Determine status
+          let saleStatus: 'pending' | 'confirmed' | 'cancelled' = 'pending';
+          if (order.status === 'cancelled') {
+              saleStatus = 'cancelled';
+          } else if (order.status === 'paid' || order.status === 'confirmed') {
+              saleStatus = 'confirmed';
+          }
+
+          // Map item to Sale
+          await Sale.create({
+            storeId,
+            customerId: customer._id,
+            productId: product._id,
+            amount: orderItem.unit_price * orderItem.quantity,
+            date: new Date(order.date_created),
+            channel: 'mercadolibre',
+            status: saleStatus,
+            rawOrderData: order, // Keep full order reference
+          });
+          
+          customer.purchasesCount += 1;
+          importedCount++;
+        } else {
+          console.warn(`[MercadoLibre] Product ${itemId} not found for order ${order.id}`);
+        }
       }
+      await customer.save();
     }
 
     return res.status(200).json({ message: `Se importaron ${importedCount} ventas.` });
@@ -107,7 +223,11 @@ export const getProductQuestions = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Tienda no conectada a Mercado Libre' });
     }
 
-    const meliProvider = new MeliProvider(connections.meliAccessToken);
+    const meliProvider = new MeliProvider(
+      connections.meliAccessToken,
+      connections.meliRefreshToken || null,
+      connections.storeId as any
+    );
     const questions = await meliProvider.getQuestions(itemId);
 
     // Save/Update questions in database and update product queries count
@@ -260,7 +380,11 @@ export const importMeliCustomers = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Tienda no conectada a Mercado Libre' });
     }
 
-    const meliProvider = new MeliProvider(connections.meliAccessToken);
+    const meliProvider = new MeliProvider(
+      connections.meliAccessToken,
+      connections.meliRefreshToken || null,
+      connections.storeId as any
+    );
     const me: { id: string } = await callApi('/users/me', 'GET', connections.meliAccessToken);
     
     const orders = await meliProvider.getOrders(me.id);
@@ -302,4 +426,119 @@ export const importMeliCustomers = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({ error: 'Error al importar clientes de Mercado Libre' });
   }
 };
+
+export const importBilling = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    const { rows } = req.body;
+
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+    if (!rows || !Array.isArray(rows)) return res.status(400).json({ error: 'Datos inválidos' });
+
+    for (const row of rows) {
+      await BillingTransaction.create({
+        storeId,
+        date: new Date(row.date),
+        description: row.description,
+        amount: row.amount,
+        type: row.type,
+        invoiceNumber: row.invoiceNumber,
+        chargeNumber: row.chargeNumber,
+        saleNumber: row.saleNumber,
+        publicationTitle: row.publicationTitle,
+      });
+    }
+
+    // Update or create summary
+    console.log('[DEBUG] Rows to import:', rows);
+    
+    // Calculate based on explicit type, not just amount sign
+    const totalCharges = rows.filter((r: any) => r.type === 'charge').reduce((sum: number, r: any) => sum + (parseFloat(r.amount) || 0), 0);
+    const totalRefunds = rows.filter((r: any) => r.type === 'refund').reduce((sum: number, r: any) => sum + Math.abs(parseFloat(r.amount) || 0), 0);
+    const netChange = totalCharges - totalRefunds;
+
+    console.log(`[DEBUG] Updating summary for store ${storeId}: Charges=${totalCharges}, Refunds=${totalRefunds}, Net=${netChange}`);
+
+    const result = await BillingSummary.findOneAndUpdate(
+        { storeId: new mongoose.Types.ObjectId(storeId) },
+        { 
+            $inc: { 
+                totalCharges: totalCharges, 
+                totalRefunds: totalRefunds,
+                balance: netChange
+            } 
+        },
+        { upsert: true, new: true }
+    );
+    console.log('[DEBUG] Summary update result:', result);
+
+    return res.status(200).json({ message: 'Facturación importada correctamente' });
+  } catch (err: any) {
+    console.error('[MercadoLibre] importBilling error:', err?.message);
+    return res.status(500).json({ error: 'Error al importar facturación' });
+  }
+};
+
+// Helper to recalculate summary from transactions
+const recalculateSummary = async (storeId: mongoose.Types.ObjectId) => {
+    const transactions = await BillingTransaction.find({ storeId });
+    let totalCharges = 0;
+    let totalRefunds = 0;
+
+    transactions.forEach(t => {
+      if (t.type === 'charge') {
+        totalCharges += t.amount;
+      } else if (t.type === 'refund') {
+        totalRefunds += Math.abs(t.amount); 
+      }
+    });
+
+    await BillingSummary.findOneAndUpdate(
+        { storeId },
+        { 
+            totalCharges: totalCharges, 
+            totalRefunds: totalRefunds,
+            balance: totalCharges - totalRefunds
+        },
+        { upsert: true, new: true }
+    );
+};
+
+export const deleteTransaction = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    const { id } = req.params;
+
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    await BillingTransaction.findOneAndDelete({ _id: id, storeId: new mongoose.Types.ObjectId(storeId) });
+    
+    await recalculateSummary(new mongoose.Types.ObjectId(storeId));
+
+    return res.status(200).json({ message: 'Transacción eliminada correctamente' });
+  } catch (err: any) {
+    console.error('[MercadoLibre] deleteTransaction error:', err?.message);
+    return res.status(500).json({ error: 'Error al eliminar transacción' });
+  }
+};
+
+export const deleteAllTransactions = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    await BillingTransaction.deleteMany({ storeId: new mongoose.Types.ObjectId(storeId) });
+    
+    await BillingSummary.findOneAndUpdate(
+        { storeId: new mongoose.Types.ObjectId(storeId) },
+        { totalCharges: 0, totalRefunds: 0, balance: 0 },
+        { upsert: true }
+    );
+
+    return res.status(200).json({ message: 'Todas las transacciones eliminadas' });
+  } catch (err: any) {
+    console.error('[MercadoLibre] deleteAllTransactions error:', err?.message);
+    return res.status(500).json({ error: 'Error al eliminar transacciones' });
+  }
+}
 

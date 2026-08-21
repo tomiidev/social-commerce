@@ -12,7 +12,8 @@ import {
   MapPin,
   X,
   FileText,
-  Tag
+  Tag,
+  ChevronDown
 } from 'lucide-react';
 import { InstagramIcon, FacebookIcon, ShopifyIcon, MeliIcon } from '../../components/SocialIcons';
 
@@ -44,17 +45,36 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(15);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCustomers, setTotalCustomers] = useState(0);
+  
   // Drawer/Detail states
   const [selectedCust, setSelectedCust] = useState<Customer | null>(null);
-  const [selectedCustSales, setSelectedCustSales] = useState<Sale[]>([]);
+  const [selectedCustSales, setSelectedCustSales] = useState<any[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  
+  // Collapsed sales state
+  const [expandedSales, setExpandedSales] = useState<Record<string, boolean>>({});
+
+  const toggleSaleExpand = (saleId: string) => {
+    setExpandedSales(prev => ({
+      ...prev,
+      [saleId]: !prev[saleId]
+    }));
+  };
 
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/customers');
+      const res = await api.get(`/customers`);
+      // API returns an array directly
       setCustomers(res.data);
+      setTotalCustomers(res.data.length);
+      setTotalPages(Math.ceil(res.data.length / limit));
     } catch (err) {
       console.error('Error fetching customers:', err);
     } finally {
@@ -63,11 +83,8 @@ export default function CustomersPage() {
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchCustomers();
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
+    fetchCustomers();
+  }, []); // Remove dependency on page/limit since we are not using server-side pagination now
 
   const handleOpenDetail = async (cust: Customer) => {
     setSelectedCust(cust);
@@ -83,22 +100,11 @@ export default function CustomersPage() {
     }
   };
 
-  // Find conversation ID for customer to redirect
-  const handleGoToChat = async (customerId: string) => {
-    try {
-      const res = await api.get('/conversations');
-      const found = res.data.find((c: { customerId: { _id: string } }) => c.customerId?._id === customerId);
-      if (found) {
-        router.push(`/inbox`);
-      } else {
-        alert('No se encontró un chat activo para este cliente.');
-      }
-    } catch (err) {
-      console.error('Error locating chat:', err);
-    }
-  };
+  // Paginated customers for display
+  const paginatedCustomers = (customers || []).slice((currentPage - 1) * limit, currentPage * limit);
 
-  const filteredCustomers = customers.filter(c => 
+  // Filtered customers (client-side)
+  const filteredCustomers = (paginatedCustomers || []).filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     c.username.toLowerCase().includes(search.toLowerCase()) ||
     c.city.toLowerCase().includes(search.toLowerCase())
@@ -177,7 +183,7 @@ export default function CustomersPage() {
                     <td className="p-4"><div className="h-4 w-6 bg-slate-100 rounded ml-auto"></div></td>
                   </tr>
                 ))
-              ) : filteredCustomers.length === 0 ? (
+              ) : (customers || []).length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-slate-400">
                     <Users className="h-10 w-10 text-slate-300 mx-auto mb-2" />
@@ -185,7 +191,7 @@ export default function CustomersPage() {
                   </td>
                 </tr>
               ) : (
-                filteredCustomers.map(cust => {
+                customers.map(cust => {
                   let ChannelIcon;
                   let channelClasses = '';
                   
@@ -259,6 +265,40 @@ export default function CustomersPage() {
           </table>
         </div>
       </div>
+      
+      {/* Pagination Controls */}
+      <div className="mt-4 flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
+        <select
+          value={limit}
+          onChange={(e) => {
+            setLimit(Number(e.target.value));
+            setCurrentPage(1);
+          }}
+          className="text-xs border border-slate-200 rounded-xl px-3 py-1.5 text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+        >
+          {[15, 30, 50].map((l) => (
+            <option key={l} value={l}>{l} clientes por página</option>
+          ))}
+        </select>
+        <div className="flex items-center space-x-2 text-xs font-semibold text-slate-600">
+          <span className="text-slate-500 mr-4">Total: {totalCustomers} clientes</span>
+          <button
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            className="px-3 py-1.5 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition"
+          >
+            Anterior
+          </button>
+          <span className="text-slate-500">Página {currentPage} de {totalPages || 1}</span>
+          <button
+            disabled={currentPage === totalPages || totalPages === 0}
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            className="px-3 py-1.5 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition"
+          >
+            Siguiente
+          </button>
+        </div>
+      </div>
 
       {/* CUSTOMER DETAIL DRAWER */}
       {drawerOpen && selectedCust && (
@@ -290,7 +330,7 @@ export default function CustomersPage() {
                 <button
                   onClick={() => {
                     setDrawerOpen(false);
-                    handleGoToChat(selectedCust._id);
+                 /*    handleGoToChat(selectedCust._id); */
                   }}
                   className="flex items-center space-x-1.5 px-4.5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-150 hover:bg-indigo-700 transition"
                 >
@@ -360,23 +400,108 @@ export default function CustomersPage() {
                 ) : selectedCustSales.length === 0 ? (
                   <p className="text-xs text-slate-400 italic">No registra compras todavía.</p>
                 ) : (
-                  <div className="space-y-2">
-                    {selectedCustSales.map(sale => (
-                      <div key={sale._id} className="flex justify-between items-center p-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs">
-                        <div className="flex flex-col text-left">
-                          <span className="font-bold text-slate-700">{sale.productId?.name || 'Producto'}</span>
-                          <span className="text-[10px] text-slate-400 mt-0.5">
-                            {new Date(sale.date).toLocaleDateString('es-UY', { day: '2-digit', month: 'short' })}
-                          </span>
+                  <div className="space-y-3">
+                    {selectedCustSales.map(sale => {
+                      const isExpanded = !!expandedSales[sale._id];
+                      
+                      // Try to extract rich product info from rawOrderData if available
+                      const orderItem = sale.rawOrderData?.order_items?.[0] || sale.rawOrderData?.order_request;
+                      const productTitle = orderItem?.item?.title || sale.productId?.name || 'Producto sin registrar';
+                      const productQuantity = orderItem?.quantity || 1;
+                      const unitPrice = orderItem?.unit_price || sale.amount;
+                      const currency = sale.rawOrderData?.currency_id || 'UYU';
+                      
+                      // Payment and cancel details
+                      const paymentMethod = sale.rawOrderData?.payments?.[0]?.payment_method_id || 'N/A';
+                      const paymentStatus = sale.rawOrderData?.payments?.[0]?.status_detail || sale.status;
+                      const cancelReason = sale.rawOrderData?.cancel_detail?.description || null;
+
+                      // Placeholder image for products
+                      const productImage = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=150';
+
+                      return (
+                        <div key={sale._id} className="bg-slate-50 border border-slate-100 rounded-xl overflow-hidden text-xs shadow-sm">
+                          {/* Main Row / Header */}
+                          <div className="p-3 flex items-start space-x-3">
+                            <img
+                              src={productImage}
+                              alt={productTitle}
+                              className="h-12 w-12 rounded-lg object-cover border border-slate-200"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <h6 className="font-bold text-slate-800 truncate" title={productTitle}>{productTitle}</h6>
+                              <div className="flex items-center space-x-2 mt-1">
+                                <span className="text-[10px] text-slate-400">
+                                  {new Date(sale.date).toLocaleDateString('es-UY', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                </span>
+                                <span className="text-[10px] bg-slate-200/60 px-1.5 py-0.5 rounded text-slate-500 font-semibold capitalize">
+                                  {sale.channel || 'Canal'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end space-y-1.5">
+                              <span className="font-bold text-slate-800">
+                                {currency === 'UYU' ? '$' : currency} {sale.amount.toLocaleString()}
+                              </span>
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold border ${
+                                sale.status === 'confirmed' 
+                                  ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
+                                  : sale.status === 'cancelled'
+                                  ? 'bg-rose-50 text-rose-600 border-rose-100'
+                                  : 'bg-slate-100 text-slate-400 border-slate-200'
+                              }`}>
+                                {sale.status}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Secondary Detail Dropdown Trigger */}
+                          <button
+                            onClick={() => toggleSaleExpand(sale._id)}
+                            className="w-full bg-slate-100/50 hover:bg-slate-100 px-3 py-1.5 border-t border-slate-100/80 flex items-center justify-between text-[10px] font-bold text-slate-500 transition-colors"
+                          >
+                            <span>Detalle de la orden</span>
+                            <ChevronDown className={`h-3 w-3 text-slate-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                          </button>
+
+                          {/* Expanded Secondary Details */}
+                          {isExpanded && (
+                            <div className="p-3 bg-white border-t border-slate-100 text-[10px] text-slate-600 space-y-2 leading-relaxed">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <span className="block text-slate-400 font-medium">Cantidad</span>
+                                  <span className="font-bold text-slate-800">{productQuantity} unidades</span>
+                                </div>
+                                <div>
+                                  <span className="block text-slate-400 font-medium">Precio Unitario</span>
+                                  <span className="font-bold text-slate-800">{currency === 'UYU' ? '$' : currency} {unitPrice.toLocaleString()}</span>
+                                </div>
+                                <div>
+                                  <span className="block text-slate-400 font-medium">Método de Pago</span>
+                                  <span className="font-semibold text-slate-700 capitalize">{paymentMethod.replace('_', ' ')}</span>
+                                </div>
+                                <div>
+                                  <span className="block text-slate-400 font-medium">Estado del Pago</span>
+                                  <span className="font-semibold text-slate-700 capitalize">{paymentStatus.replace('_', ' ')}</span>
+                                </div>
+                              </div>
+                              {sale.rawOrderData?.shipping?.id && (
+                                <div className="pt-1.5 border-t border-slate-50">
+                                  <span className="block text-slate-400 font-medium">ID de Envío</span>
+                                  <span className="font-bold text-slate-800">{sale.rawOrderData.shipping.id}</span>
+                                </div>
+                              )}
+                              {cancelReason && (
+                                <div className="pt-1.5 border-t border-slate-50 bg-rose-50/40 p-2 rounded-lg border border-rose-100/30">
+                                  <span className="block text-rose-500 font-bold uppercase tracking-wider text-[8px]">Motivo de Cancelación</span>
+                                  <span className="font-semibold text-rose-700">{cancelReason}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <span className="font-bold text-slate-800">${sale.amount.toLocaleString()}</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold border ${
-                            sale.status === 'confirmed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-100 text-slate-400'
-                          }`}>{sale.status}</span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

@@ -47,6 +47,10 @@ export default function SettingsPage() {
   const [meliConnected, setMeliConnected] = useState(false);
   const [loadingMeli, setLoadingMeli] = useState(false);
   
+  // Shopify Integration States
+  const [shopifyConnected, setShopifyConnected] = useState(false);
+  const [loadingShopify, setLoadingShopify] = useState(false);
+  
   // AI Usage State
   const [aiUsage, setAiUsage] = useState({ tokensUsed: 0, tokenLimit: 0 });
 
@@ -84,13 +88,11 @@ export default function SettingsPage() {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        // Fetch Meta
-        const resMeta = await api.get('/meta/status');
-        setMetaConnected(resMeta.data.connected);
-
-        // Fetch Meli
-        const resMeli = await api.get('/mercadolibre/status');
-        setMeliConnected(resMeli.data.connected);
+        const res = await api.get('/connections/status');
+        console.log('[SettingsPage] API response for connections status:', res.data);
+        setMetaConnected(res.data.metaConnected);
+        setMeliConnected(res.data.meliConnected);
+        setShopifyConnected(res.data.shopifyConnected);
 
         // Fetch AI Usage
         const resAi = await api.get('/ai/token-usage');
@@ -99,8 +101,8 @@ export default function SettingsPage() {
         console.error('Error fetching connection status:', _err);
       }
     };
-
     fetchStatus();
+
 
     let timerId: ReturnType<typeof setTimeout> | undefined = undefined;
 
@@ -208,6 +210,42 @@ export default function SettingsPage() {
       setTimeout(() => setErrorMsg(null), 4000);
     } finally {
       setLoadingMeli(false);
+    }
+  };
+
+  const handleConnectShopify = async () => {
+    const shopUrl = prompt('Ingresa la URL de la tienda (ej. tienda.myshopify.com)');
+    if (!shopUrl) return;
+    setLoadingShopify(true);
+    setErrorMsg(null);
+    try {
+      const res = await api.get(`/shopify/auth/url?shop=${shopUrl}`);
+      window.location.href = res.data.url;
+    } catch (_err) {
+      console.error('Error connecting Shopify:', _err);
+      setErrorMsg('Error al iniciar la conexión con Shopify.');
+      setTimeout(() => setErrorMsg(null), 4000);
+      setLoadingShopify(false);
+    }
+  };
+
+  const handleDisconnectShopify = async () => {
+    if (!window.confirm('¿Estás seguro de que querés desconectar tu tienda de Shopify?')) {
+      return;
+    }
+    setLoadingShopify(true);
+    setErrorMsg(null);
+    try {
+      await api.post('/shopify/disconnect');
+      setShopifyConnected(false);
+      setSuccessMsg('Tienda de Shopify desconectada correctamente.');
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (_err) {
+      console.error('Error disconnecting Shopify:', _err);
+      setErrorMsg('Error al desconectar la tienda de Shopify.');
+      setTimeout(() => setErrorMsg(null), 4000);
+    } finally {
+      setLoadingShopify(false);
     }
   };
 
@@ -329,7 +367,14 @@ export default function SettingsPage() {
                 loading={loadingMeli}
                 icon={<div className="p-2.5 bg-yellow-50 text-yellow-600 rounded-full font-bold text-[10px]">ML</div>}
               />
-              <ShopifyConnectionCard />
+              <IntegrationCard 
+                title="Shopify" 
+                connected={shopifyConnected} 
+                onConnect={handleConnectShopify} 
+                onDisconnect={handleDisconnectShopify}
+                loading={loadingShopify}
+                icon={<div className="p-2.5 bg-green-50 text-green-600 rounded-full"><ShopifyIcon className="h-4 w-4" /></div>}
+              />
             </div>
           </section>
           
@@ -398,6 +443,7 @@ export default function SettingsPage() {
 }
 
 function IntegrationCard({ title, connected, onConnect, onDisconnect, loading, icon }: { title: string, connected: boolean, onConnect: () => void, onDisconnect: () => void, loading: boolean, icon: React.ReactNode }) {
+  console.log(`[IntegrationCard] ${title} connected:`, connected);
   return (
     <div className="flex items-center justify-between p-4 bg-slate-50/50 border border-slate-100 rounded-2xl">
       <div className="flex items-center space-x-3">
@@ -418,52 +464,6 @@ function IntegrationCard({ title, connected, onConnect, onDisconnect, loading, i
       >
         {loading ? 'Procesando...' : connected ? 'Desconectar' : 'Conectar'}
       </button>
-    </div>
-  );
-}
-
-function ShopifyConnectionCard() {
-  const [connected, setConnected] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [shopUrl, setShopUrl] = useState('');
-
-  useEffect(() => {
-    api.get('/shopify/status').then(res => setConnected(res.data.connected));
-  }, []);
-
-  const handleConnect = async () => {
-    if (!shopUrl) return alert('Por favor ingresa la URL de la tienda (ej. tienda.myshopify.com)');
-    setLoading(true);
-    try {
-      const res = await api.get(`/shopify/auth/url?shop=${shopUrl}`);
-      window.location.href = res.data.url;
-    } catch (_err) {
-      alert('Error al iniciar la conexión');
-      setLoading(false);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    setLoading(true);
-    try {
-      await api.post('/shopify/disconnect');
-      setConnected(false);
-      setShopUrl('');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="p-4 bg-slate-50/50 border border-slate-100 rounded-2xl">
-      <h3 className="text-xs font-bold text-slate-800 mb-2 flex items-center">
-        <ShopifyIcon className="h-4 w-4 mr-1.5" /> Shopify
-      </h3>
-      {connected ? (
-        <div className="flex items-center justify-between"><span className="text-emerald-600 text-xs font-bold">Conectado</span><button onClick={handleDisconnect} className="text-rose-500 text-xs font-semibold">Desconectar</button></div>
-      ) : (
-        <div className="space-y-2"><input placeholder="shop.myshopify.com" value={shopUrl} onChange={e => setShopUrl(e.target.value)} className="w-full border p-2 rounded text-xs" /><button onClick={handleConnect} disabled={loading} className="w-full bg-indigo-600 text-white p-2 rounded text-xs font-semibold">Conectar Shopify</button></div>
-      )}
     </div>
   );
 }

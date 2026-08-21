@@ -57,6 +57,25 @@ export async function exchangeCodeForToken(code: string): Promise<{ access_token
   return res.data;
 }
 
+/**
+ * Renews the access token using the refresh token.
+ */
+export async function refreshToken(refresh_token: string): Promise<{ access_token: string; refresh_token: string; expires_in: number }> {
+  const res = await axios.post<{ access_token: string; refresh_token: string; expires_in: number }>(
+    `${BASE_URL}/oauth/token`,
+    new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      refresh_token,
+    }).toString(),
+    {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    }
+  );
+  return res.data;
+}
+
 // ---------------------------------------------------------------------------
 // Generic API wrapper
 // ---------------------------------------------------------------------------

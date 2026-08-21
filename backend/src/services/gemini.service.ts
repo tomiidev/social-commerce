@@ -53,6 +53,102 @@ export class GeminiService {
   }
 
   /**
+   * Analyzes billing transaction data for insights.
+   */
+  static async analyzeBillingData(
+    storeId: string,
+    transactions: any[]
+  ): Promise<string> {
+    const modelName = 'gemini-3.1-flash-lite';
+    const client = this.getClient();
+
+    const systemPrompt = `Sos un experto financiero para e-commerce. Analiza las siguientes transacciones de facturación y ofrece insights clave (tendencias, patrones de gasto, anomalías si las hay).
+La moneda es Pesos Uruguayos (UYU) y se representa como $ (ej. $3.990).
+Responde de forma clara, profesional y en español uruguayo usando markdown.
+
+Transacciones:
+${JSON.stringify(transactions)}`;
+
+    if (!client || !(await this.checkQuotas(storeId))) {
+      return "No se pudo realizar el análisis (API KEY no configurada o cuota excedida).";
+    }
+
+    try {
+      const model = client.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(systemPrompt);
+      const response = await result.response;
+      
+      const usage = response.usageMetadata;
+      if (usage) {
+        await this.logUsage(
+          storeId,
+          modelName,
+          usage.promptTokenCount,
+          usage.candidatesTokenCount
+        );
+      } else {
+        await this.logUsage(storeId, modelName, systemPrompt.length / 4, response.text().length / 4);
+      }
+      
+      return response.text().trim();
+    } catch (error: any) {
+      console.error('Error analyzing billing data with Gemini:', error);
+      throw new Error(`Gemini Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Reconciles external billing report data against database transactions.
+   */
+  static async reconcileBillingData(
+    storeId: string,
+    dbTransactions: any[],
+    externalReportData: any[]
+  ): Promise<string> {
+    const modelName = 'gemini-3.1-flash-lite';
+    const client = this.getClient();
+
+    const systemPrompt = `Sos un experto en conciliación contable. Tu tarea es conciliar el reporte externo de facturación (proporcionado en XLSX) contra las transacciones registradas en la base de datos.
+Identifica:
+1. Transacciones faltantes en la BD.
+2. Transacciones faltantes en el reporte externo.
+3. Desajustes en montos o fechas.
+
+La moneda es Pesos Uruguayos (UYU).
+Responde con un resumen claro en markdown detallando las diferencias encontradas.
+
+Transacciones BD: ${JSON.stringify(dbTransactions)}
+Reporte Externo: ${JSON.stringify(externalReportData)}`;
+
+    if (!client || !(await this.checkQuotas(storeId))) {
+      return "No se pudo realizar la conciliación (API KEY no configurada o cuota excedida).";
+    }
+
+    try {
+      const model = client.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(systemPrompt);
+      const response = await result.response;
+      
+      const usage = response.usageMetadata;
+      if (usage) {
+        await this.logUsage(
+          storeId,
+          modelName,
+          usage.promptTokenCount,
+          usage.candidatesTokenCount
+        );
+      } else {
+        await this.logUsage(storeId, modelName, systemPrompt.length / 4, response.text().length / 4);
+      }
+      
+      return response.text().trim();
+    } catch (error: any) {
+      console.error('Error reconciling billing data with Gemini:', error);
+      throw new Error(`Gemini Error: ${error.message}`);
+    }
+  }
+
+  /**
    * Parses raw product data (e.g. from Meta) and maps it to the Product model structure
    */
   static async parseProductData(

@@ -9,11 +9,25 @@ export const getCustomers = async (req: AuthRequest, res: Response) => {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    const customers = await Customer.find({
-      storeId: new mongoose.Types.ObjectId(storeId),
-    }).sort({ updatedAt: -1 });
+    const { page, limit } = req.query;
+    const currentPage = parseInt(page as string) || 1;
+    const perPage = parseInt(limit as string) || 15;
 
-    return res.status(200).json(customers);
+    const query = { storeId: new mongoose.Types.ObjectId(storeId) };
+
+    const total = await Customer.countDocuments(query);
+    const customers = await Customer.find(query)
+      .sort({ updatedAt: -1 })
+      .skip((currentPage - 1) * perPage)
+      .limit(perPage);
+
+    return res.status(200).json({
+      customers,
+      total,
+      currentPage,
+      pages: Math.ceil(total / perPage),
+      perPage
+    });
   } catch (error: any) {
     console.error('Error fetching customers:', error);
     return res.status(500).json({ error: 'Error al obtener clientes' });
@@ -37,10 +51,19 @@ export const getCustomerById = async (req: AuthRequest, res: Response) => {
     }
 
     // Get customer's sales
+    console.log('DEBUG: Fetching sales for storeId:', storeId, 'and customerId:', customer._id);
+    
+    // Debug: List all sales in this store to verify linkage
+    const allStoreSales = await Sale.find({ storeId: new mongoose.Types.ObjectId(storeId) });
+    console.log('DEBUG: Total sales in store:', allStoreSales.length);
+    console.log('DEBUG: Sales customerIds:', allStoreSales.map(s => s.customerId));
+
     const sales = await Sale.find({
       storeId: new mongoose.Types.ObjectId(storeId),
       customerId: customer._id,
     }).populate('productId').sort({ date: -1 });
+
+    console.log('DEBUG: Found sales for customer:', sales.length);
 
     return res.status(200).json({
       customer,

@@ -26,6 +26,7 @@ import meliRoutes from './routes/mercadolibre.routes';
 import webhookRoutes from './routes/webhook.routes';
 import eventRoutes from './routes/event.routes';
 import shopifyRoutes from './routes/shopify.routes';
+import connectionRoutes from './routes/connections.routes';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -90,6 +91,7 @@ app.use('/api/mercadolibre', meliRoutes);
 app.use('/api/webhook/meta', webhookRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/shopify', shopifyRoutes);
+app.use('/api/connections', connectionRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

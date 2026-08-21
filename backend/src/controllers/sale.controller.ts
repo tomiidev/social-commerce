@@ -9,12 +9,9 @@ import { callApi } from '../services/mercadolibre.service';
 import axios from 'axios';
 import mongoose from 'mongoose';
 
-// ... existing imports ...
-
 // ---------------------------------------------------------------------------
 // POST /api/sales/import-all
 // ---------------------------------------------------------------------------
-
 export const importAllSales = async (req: AuthRequest, res: Response) => {
   try {
     const storeId = req.user?.storeId;
@@ -90,9 +87,6 @@ export const importAllSales = async (req: AuthRequest, res: Response) => {
   }
 };
 
-
-// ... existing imports ...
-
 // ---------------------------------------------------------------------------
 // GET /api/sales/summary
 // ---------------------------------------------------------------------------
@@ -115,7 +109,7 @@ export const getSalesSummary = async (req: AuthRequest, res: Response) => {
       mercadolibre: 0,
       shopify: 0
     };
-    
+
     salesSummary.forEach(item => {
       if (item._id && salesBreakdown.hasOwnProperty(item._id)) {
         salesBreakdown[item._id as keyof typeof salesBreakdown] = item.total;
@@ -132,19 +126,71 @@ export const getSalesSummary = async (req: AuthRequest, res: Response) => {
 };
 
 export const getSales = async (req: AuthRequest, res: Response) => {
-// ...
   try {
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    const sales = await Sale.find({
-      storeId: new mongoose.Types.ObjectId(storeId),
-    })
+    const { page, limit } = req.query;
+    const currentPage = parseInt(page as string) || 1;
+    const perPage = parseInt(limit as string) || 15;
+
+    const query = { storeId: new mongoose.Types.ObjectId(storeId) };
+
+    const total = await Sale.countDocuments(query);
+    const sales = await Sale.find(query)
       .populate('customerId')
       .populate('productId')
-      .sort({ date: -1 });
+      .sort({ date: -1 })
+      .skip((currentPage - 1) * perPage)
+      .limit(perPage);
 
-    return res.status(200).json(sales);
+    const normalizedSales = await Promise.all(sales.map(async (sale) => {
+      const saleObj = sale.toObject();
+      
+      // Default values
+      let productName = 'Producto';
+      let productPrice = saleObj.amount;
+      let productImage = 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?q=80&w=300';
+
+      // 1. Attempt to fetch product details using the productId (ObjectId)
+      if (saleObj.productId) {
+        const product = await Product.findById(saleObj.productId);
+        if (product) {
+          productName = product.name || productName;
+          productPrice = product.price || productPrice;
+          productImage = product.image || productImage;
+        }
+      }
+      
+      // 2. Fallback to rawOrderData if channel is mercadolibre and productId lookup failed or wasn't available
+      if (productName === 'Producto' && saleObj.channel === 'mercadolibre' && saleObj.rawOrderData?.order_items?.[0]) {
+        const orderItem = saleObj.rawOrderData.order_items[0];
+        productName = orderItem.item?.title || productName;
+        productPrice = orderItem.unit_price || productPrice;
+      }
+
+      return {
+        _id: saleObj._id,
+        channel: saleObj.channel,
+        status: saleObj.status,
+        amount: saleObj.amount,
+        date: saleObj.date,
+        productId: {
+          name: productName,
+          price: productPrice,
+          image: productImage
+        },
+        rawOrderData: saleObj.rawOrderData
+      };
+    }));
+
+    return res.status(200).json({
+      sales: normalizedSales,
+      total,
+      currentPage,
+      pages: Math.ceil(total / perPage),
+      perPage
+    });
   } catch (error: any) {
     console.error('Error fetching sales:', error);
     return res.status(500).json({ error: 'Error al obtener ventas' });
@@ -202,5 +248,87 @@ export const createSale = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error creating sale:', error);
     return res.status(500).json({ error: 'Error al registrar venta' });
+  }
+};
+
+export const importSalesCsv = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+    
+    const { sales } = req.body; 
+    
+    if (!Array.isArray(sales)) return res.status(400).json({ error: 'Formato inválido' });
+
+    let importedCount = 0;
+    for (const s of sales) {
+      // 1. Find or create Customer
+      const email = s.rawOrderData?.customer?.email;
+      let customer = null;
+      if (email) {
+        customer = await Customer.findOne({ storeId, email, channel: s.channel });
+      }
+
+      if (!customer) {
+        customer = await Customer.create({
+          storeId,
+          name: 'Cliente Importado',
+          username: email || 'imported_customer',
+          email: email,
+          channel: s.channel,
+        });
+      }
+
+      // 2. Find Product
+      const productName = s.rawOrderData?.line_items?.[0]?.name;
+      let productId = null;
+      if (productName) {
+        const product = await Product.findOne({ storeId, name: productName });
+        productId = product?._id;
+      }
+
+      // 3. Create Sale
+      await Sale.create({
+        storeId: new mongoose.Types.ObjectId(storeId),
+        customerId: customer._id,
+        productId: productId || null,
+        amount: s.amount,
+        date: new Date(s.date),
+        channel: s.channel,
+        status: s.status,
+        rawOrderData: s.rawOrderData
+      });
+      importedCount++;
+    }
+    
+    return res.status(200).json({ message: `Se importaron ${importedCount} ventas correctamente.` });
+  } catch (error) {
+    console.error('Error importing sales CSV:', error);
+    return res.status(500).json({ error: 'Error al importar ventas' });
+  }
+};
+
+export const updateSale = async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.user?.storeId;
+    if (!storeId) return res.status(401).json({ error: 'No autorizado' });
+
+    const { id } = req.params;
+    const { status, amount, channel } = req.body;
+
+    const sale = await Sale.findOneAndUpdate(
+      { _id: id, storeId: new mongoose.Types.ObjectId(storeId) },
+      { $set: { status, amount, channel } },
+      { new: true }
+    );
+
+    if (!sale) {
+      return res.status(404).json({ error: 'Venta no encontrada' });
+    }
+
+    return res.status(200).json(sale);
+  } catch (error: any) {
+    console.error('Error updating sale:', error);
+    return res.status(500).json({ error: 'Error al actualizar venta' });
   }
 };

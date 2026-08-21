@@ -76,19 +76,58 @@ export const importShopifySales = async (req: AuthRequest, res: Response) => {
     const response = await client.get('/orders.json?status=any');
     const orders = response.data.orders;
 
-    let importedCount = 0;
     for (const order of orders) {
+      console.log(`[Shopify] Processing order ${order.id}`);
+      console.log(`[Shopify] Order structure keys:`, Object.keys(order));
+      console.log(`[Shopify] Order customer:`, JSON.stringify(order.customer));
+      
+      if (!order) {
+        console.warn(`[Shopify] Skipping invalid order`);
+        continue;
+      }
+
+      // 1. Find or create Customer
+      const email = order.customer?.email;
+      let customer = null;
+      if (email) {
+        customer = await Customer.findOne({ storeId, email, channel: 'shopify' });
+      }
+
+      if (!customer) {
+        // Create new customer if not found
+        customer = await Customer.create({
+          storeId,
+          name: `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim() || 'Cliente Shopify',
+          username: order.customer?.email || 'shopify_customer',
+          email: order.customer?.email,
+          channel: 'shopify',
+          externalId: order.customer?.id?.toString(),
+        });
+      }
+
+      // 2. Find Product (using first item as primary)
+      const lineItem = order.line_items?.[0];
+      let productId = null;
+      if (lineItem?.sku) {
+        const product = await Product.findOne({ storeId, sku: lineItem.sku });
+        productId = product?._id;
+      }
+
       // Map Shopify order to Sale
-      const sale = await Sale.create({
+      const saleData = {
         storeId,
-        customerId: new mongoose.Types.ObjectId(), // Needs proper mapping
-        productId: new mongoose.Types.ObjectId(), // Needs proper mapping
+        customerId: customer._id,
+        productId: productId || null, // Keep null if product not found
         amount: parseFloat(order.total_price),
         date: new Date(order.created_at),
         channel: 'shopify',
         status: order.financial_status === 'paid' ? 'confirmed' : 'pending',
         rawOrderData: order, // Store full order JSON
-      });
+      };
+      
+      console.log(`[Shopify] Attempting to save sale for order ${order.id}. Sale data:`, JSON.stringify(saleData));
+      const savedSale = await Sale.create(saleData);
+      console.log(`[Shopify] Sale saved successfully: ${savedSale._id}. rawOrderData saved: ${!!savedSale.rawOrderData}`);
       importedCount++;
     }
 
