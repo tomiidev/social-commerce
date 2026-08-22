@@ -25,6 +25,9 @@ router.delete('/billing/transaction/:id', protect, controller.deleteTransaction)
 router.delete('/billing/all', protect, controller.deleteAllTransactions);
 router.post('/billing/analyze', protect, billingAnalysisController.analyzeBilling);
 router.post('/billing/reconcile', protect, billingAnalysisController.reconcileBilling);
+router.get('/billing/margins', protect, billingAnalysisController.getMarginAnalysis);
+router.get('/billing/forecast', protect, billingAnalysisController.getCashFlowForecast);
+router.get('/billing/pricing', protect, billingAnalysisController.getPricingRecommendations);
 
 // Customers import
 router.post('/customers/import', protect, controller.importMeliCustomers);

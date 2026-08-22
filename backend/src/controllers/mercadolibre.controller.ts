@@ -8,7 +8,6 @@
  *  GET  /api/mercadolibre/status          — Return connection status for this store
  *  POST /api/mercadolibre/disconnect      — Remove MELI credentials from the store
  */
-
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { Event } from '../models/Event';
@@ -24,6 +23,7 @@ import jwt from "jsonwebtoken"
 import { MeliReport } from '../models/MeliReport';
 import { BillingTransaction } from '../models/BillingTransaction';
 import { BillingSummary } from '../models/BillingSummary';
+import { CategorizationService } from '../services/categorization.service';
 
 // ---------------------------------------------------------------------------
 // GET /api/mercadolibre/reports
@@ -33,28 +33,28 @@ export const getMeliBillingDocuments = async (req: AuthRequest, res: Response) =
     const storeId = req.user?.storeId;
     if (!storeId) return res.status(401).json({ error: 'No autorizado' });
 
-    // Fetch imported billing transactions from DB
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+
+    // Fetch total count and paginated transactions
+    const count = await BillingTransaction.countDocuments({ storeId: new mongoose.Types.ObjectId(storeId) });
     const transactions = await BillingTransaction.find({ storeId: new mongoose.Types.ObjectId(storeId) })
-      .sort({ date: -1 });
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit);
 
     // Calculate summary statistics
-    let totalCharges = 0;
-    let totalRefunds = 0;
-
-    transactions.forEach(t => {
-      if (t.type === 'charge') {
-        totalCharges += t.amount;
-      } else if (t.type === 'refund') {
-        totalRefunds += Math.abs(t.amount); 
-      }
-    });
+    const summaryData = await BillingSummary.findOne({ storeId: new mongoose.Types.ObjectId(storeId) });
 
     return res.status(200).json({
       transactions,
-      summary: {
-        totalCharges,
-        totalRefunds,
-        balance: totalCharges - totalRefunds
+      summary: summaryData || { totalCharges: 0, totalRefunds: 0, balance: 0 },
+      pagination: {
+        total: count,
+        page,
+        limit,
+        pages: Math.ceil(count / limit)
       }
     });
   } catch (err: any) {
@@ -427,6 +427,9 @@ export const importMeliCustomers = async (req: AuthRequest, res: Response) => {
   }
 };
 
+
+// ... (other code)
+
 export const importBilling = async (req: AuthRequest, res: Response) => {
   try {
     const storeId = req.user?.storeId;
@@ -436,17 +439,27 @@ export const importBilling = async (req: AuthRequest, res: Response) => {
     if (!rows || !Array.isArray(rows)) return res.status(400).json({ error: 'Datos inválidos' });
 
     for (const row of rows) {
-      await BillingTransaction.create({
+      const transaction = await BillingTransaction.create({
         storeId,
         date: new Date(row.date),
         description: row.description,
         amount: row.amount,
         type: row.type,
+        category: row.category || 'Otros',
         invoiceNumber: row.invoiceNumber,
         chargeNumber: row.chargeNumber,
         saleNumber: row.saleNumber,
         publicationTitle: row.publicationTitle,
       });
+      
+      // Auto-categorize if needed
+      if (!row.category || row.category === 'Otros') {
+        try {
+            await CategorizationService.categorizeTransaction(transaction._id.toString());
+        } catch (catErr) {
+            console.error('[Billing] Categorization failed, keeping default:', catErr);
+        }
+      }
     }
 
     // Update or create summary

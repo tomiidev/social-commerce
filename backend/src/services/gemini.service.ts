@@ -149,8 +149,135 @@ Reporte Externo: ${JSON.stringify(externalReportData)}`;
   }
 
   /**
-   * Parses raw product data (e.g. from Meta) and maps it to the Product model structure
+   * Generates pricing recommendations based on profitability and volume.
    */
+  static async recommendPricingStrategies(
+    storeId: string,
+    productData: any[]
+  ): Promise<string> {
+    const modelName = 'gemini-3.1-flash-lite';
+    const client = this.getClient();
+
+    const systemPrompt = `Sos un consultor de estrategia de precios para e-commerce.
+    Analiza los datos de productos provistos: nombre, precio actual, costo estimado y volumen de ventas.
+    
+    Datos de productos: ${JSON.stringify(productData)}
+    
+    Genera recomendaciones accionables para cada producto (ej. subir precio si el margen es bajo y el volumen alto, bajar si no se vende, etc.).
+    Responde con una tabla comparativa y un resumen estratégico en markdown.`;
+
+    if (!client || !(await this.checkQuotas(storeId))) {
+      return "No se pudo realizar la recomendación (API KEY no configurada o cuota excedida).";
+    }
+
+    try {
+      const model = client.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(systemPrompt);
+      const response = await result.response;
+      
+      const usage = response.usageMetadata;
+      if (usage) {
+        await this.logUsage(
+          storeId,
+          modelName,
+          usage.promptTokenCount,
+          usage.candidatesTokenCount
+        );
+      } else {
+        await this.logUsage(storeId, modelName, systemPrompt.length / 4, response.text().length / 4);
+      }
+      
+      return response.text().trim();
+    } catch (error: any) {
+      console.error('Error generating pricing recommendations with Gemini:', error);
+      throw new Error(`Gemini Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Forecasts future cash flow based on historical series.
+   */
+  static async forecastCashFlow(
+    storeId: string,
+    series: { salesSeries: any[], costsSeries: any[] }
+  ): Promise<string> {
+    const modelName = 'gemini-3.1-flash-lite';
+    const client = this.getClient();
+
+    const systemPrompt = `Sos un analista financiero experto en proyecciones de e-commerce.
+    Basándote en las series temporales de ingresos y costos históricos, proyecta el flujo de caja para los próximos 2 meses.
+    La moneda es Pesos Uruguayos (UYU).
+    
+    Series Históricas: ${JSON.stringify(series)}
+    
+    Analiza la tendencia, calcula el margen proyectado y brinda una conclusión ejecutiva en markdown.`;
+
+    if (!client || !(await this.checkQuotas(storeId))) {
+      return "No se pudo realizar el pronóstico (API KEY no configurada o cuota excedida).";
+    }
+
+    try {
+      const model = client.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(systemPrompt);
+      const response = await result.response;
+      
+      const usage = response.usageMetadata;
+      if (usage) {
+        await this.logUsage(
+          storeId,
+          modelName,
+          usage.promptTokenCount,
+          usage.candidatesTokenCount
+        );
+      } else {
+        await this.logUsage(storeId, modelName, systemPrompt.length / 4, response.text().length / 4);
+      }
+      
+      return response.text().trim();
+    } catch (error: any) {
+      console.error('Error forecasting cash flow with Gemini:', error);
+      throw new Error(`Gemini Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Categorizes a transaction description.
+   */
+  static async classifyTransaction(
+    storeId: string,
+    prompt: string
+  ): Promise<string> {
+    const modelName = 'gemini-3.1-flash-lite';
+    const client = this.getClient();
+
+    if (!client || !(await this.checkQuotas(storeId))) {
+      return "Otros";
+    }
+
+    try {
+      const model = client.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      
+      const usage = response.usageMetadata;
+      if (usage) {
+        await this.logUsage(
+          storeId,
+          modelName,
+          usage.promptTokenCount,
+          usage.candidatesTokenCount
+        );
+      } else {
+        await this.logUsage(storeId, modelName, prompt.length / 4, response.text().length / 4);
+      }
+      
+      return response.text().trim();
+    } catch (error: any) {
+      console.error('Error categorizing transaction with Gemini:', error);
+      return "Otros";
+    }
+  }
+   
   static async parseProductData(
     storeId: string,
     rawData: any

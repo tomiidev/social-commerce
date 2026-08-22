@@ -2,10 +2,12 @@ import { Schema, model, Document } from 'mongoose';
 
 export interface IBillingTransaction extends Document {
   storeId: Schema.Types.ObjectId;
+  saleId?: Schema.Types.ObjectId;
   date: Date;
   description: string;
   amount: number;
   type: 'charge' | 'refund';
+  category?: string; // New field
   invoiceNumber: string;
   chargeNumber: string;
   saleNumber: string;
@@ -17,10 +19,12 @@ export interface IBillingTransaction extends Document {
 const BillingTransactionSchema = new Schema<IBillingTransaction>(
   {
     storeId: { type: Schema.Types.ObjectId, ref: 'Store', required: true, index: true },
+    saleId: { type: Schema.Types.ObjectId, ref: 'Sale', index: true },
     date: { type: Date, required: true },
     description: { type: String, required: true },
     amount: { type: Number, required: true },
     type: { type: String, enum: ['charge', 'refund'], required: true },
+    category: { type: String, index: true }, // Added index
     invoiceNumber: { type: String },
     chargeNumber: { type: String },
     saleNumber: { type: String },
